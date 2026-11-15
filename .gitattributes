@@ -1,0 +1,16 @@
+# Keep the repository bytes canonical (LF) regardless of the checkout platform, and stop Git from
+# ever treating a shell script or a binary artifact as text.
+* text=auto
+
+*.sh    text eol=lf
+gradlew text eol=lf
+*.bat   text eol=crlf
+
+*.png   binary
+*.jpg   binary
+*.jks   binary
+*.jar   binary
+*.so    binary
+*.onnx  binary
+*.gguf  binary
+*.apk   binary

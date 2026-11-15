@@ -1,0 +1,63 @@
+# ---- Gradle / Android build output -------------------------------------------------------------
+.gradle/
+build/
+app/build/
+probe/build/
+.kotlin/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# ---- Local machine configuration and signing secrets -------------------------------------------
+# Never commit these: local.properties holds this machine's SDK path, and the keystore files are
+# the release signing material. A clone builds a debug APK without them.
+local.properties
+keystore.properties
+*.jks
+*.keystore
+
+# ---- Built distribution artifacts --------------------------------------------------------------
+dist/
+
+# ---- Models and audio ---------------------------------------------------------------------------
+# Downloaded by the app on first run (pinned by size and SHA-256); never part of the source tree.
+*.gguf
+*.onnx
+*.part
+*.safetensors
+*.wav
+*.opus
+
+# ---- Fetched native sources and host-side tools ------------------------------------------------
+# Created by spike/fetch-sherpa.sh and spike/build-llama-android.sh; regrown on demand.
+spike/llama.cpp/
+spike/sherpa/
+spike/nemo-win/
+spike/tools/
+spike/audio/
+spike/out/
+spike/*.log
+
+# ---- Python ------------------------------------------------------------------------------------
+__pycache__/
+*.pyc
+
+# ---- IDE / OS ----------------------------------------------------------------------------------
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Working notes -----------------------------------------------------------------------------
+# The *-brief.md files are session build instructions for work already landed. Project docs
+# (CONTEXT.md, SPEC.md, docs/performance-audit.md) stay tracked.
+docs/*-brief.md
+
+# ---- Misc --------------------------------------------------------------------------------------
+*.log
+*.hprof
