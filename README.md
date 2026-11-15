@@ -32,6 +32,10 @@ optionally shape it with AI, pick a space and a format. Any note can be reproces
 format of your choice from its detail screen; only the model's fields are replaced, never your text,
 and reprocessing does not mark the note as hand-edited.
 
+**Links** — an `http(s)` or `www` address inside note text, list items or a space report is
+underlined: tap it to open the default handler (usually the browser), hold it to copy, and list
+items that contain one get an explicit Copy button.
+
 **Organise** — notes and spaces are stored on-device (`notes.json`, `spaces.json`; audio as WAV under
 `bursts/`). A space can run lenses — Insight, Brainstorm, Reading, Actions, Tensions, Timeline, plus
 your own. A lens report is built in a `dataSync` foreground service and announced with a

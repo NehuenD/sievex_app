@@ -15,6 +15,10 @@
     <string name="common_today">Today</string>
     <string name="common_untitled_note">Untitled note</string>
 
+    <!-- Links found inside note text -->
+    <string name="common_link_copy">Copy</string>
+    <string name="common_link_open_failed">No app can open that link, so it was copied instead.</string>
+
     <!-- Note modes (stored canonical, displayed localised) -->
     <string name="mode_insight">Insight</string>
     <string name="mode_idea">Idea</string>

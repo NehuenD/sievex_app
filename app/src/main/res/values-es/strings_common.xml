@@ -10,6 +10,9 @@
     <string name="common_today">Hoy</string>
     <string name="common_untitled_note">Nota sin título</string>
 
+    <string name="common_link_copy">Copiar</string>
+    <string name="common_link_open_failed">Ninguna app puede abrir ese enlace; se copió en su lugar.</string>
+
     <string name="mode_insight">Hallazgo</string>
     <string name="mode_idea">Idea</string>
     <string name="mode_action">Acción</string>

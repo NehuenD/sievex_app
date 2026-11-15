@@ -8,6 +8,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
+import android.widget.Toast
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.activity.compose.BackHandler
@@ -78,13 +80,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -324,6 +336,105 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
+}
+
+// --------------------------------------------------------------------------- links in note text
+//
+// A dictated note can contain a typed URL (a watch-later list is the obvious case). Any http(s)
+// or www address in displayed text is underlined, opens the browser on tap, and is copied when
+// held. List items also get an explicit Copy button, because that is the action people reach for
+// when the link is one of several.
+
+private const val LINK_TAG = "sievex-link"
+
+private val URL_PATTERN = Regex("""(?i)\b(?:https?://|www\.)[^\s<>"']+""")
+
+/** Character ranges of the links in [text], with trailing sentence punctuation trimmed off. */
+private fun linkRanges(text: String): List<IntRange> {
+    val ranges = mutableListOf<IntRange>()
+    for (match in URL_PATTERN.findAll(text)) {
+        var end = match.range.last
+        while (end > match.range.first && text[end] in ".,;:!?)]}\"'") end--
+        if (end > match.range.first) ranges.add(match.range.first..end)
+    }
+    return ranges
+}
+
+/** `www.` is not a usable scheme; a picked link from a browser is already absolute. */
+private fun openableUrl(raw: String): String =
+    if (raw.startsWith("www.", ignoreCase = true)) "https://$raw" else raw
+
+/**
+ * Text that renders its links as links. Everything else is untouched, so a note without a URL looks
+ * exactly as it did before; the gesture layer only acts when the tap lands on a link.
+ */
+@Composable
+private fun LinkifiedText(
+    text: String,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    val ranges = remember(text) { linkRanges(text) }
+    if (ranges.isEmpty()) {
+        Text(text = text, style = style, color = color, modifier = modifier)
+        return
+    }
+
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val uriHandler = LocalUriHandler.current
+    val openFailed = stringResource(R.string.common_link_open_failed)
+
+    val annotated = remember(text, ranges) {
+        buildAnnotatedString {
+            append(text)
+            ranges.forEach { range ->
+                addStyle(
+                    SpanStyle(color = Signal, textDecoration = TextDecoration.Underline),
+                    range.first,
+                    range.last + 1
+                )
+                addStringAnnotation(
+                    tag = LINK_TAG,
+                    annotation = text.substring(range.first, range.last + 1),
+                    start = range.first,
+                    end = range.last + 1
+                )
+            }
+        }
+    }
+    var layout by remember(text) { mutableStateOf<TextLayoutResult?>(null) }
+
+    fun linkAt(position: Offset): String? {
+        val result = layout ?: return null
+        val offset = result.getOffsetForPosition(position)
+        return annotated.getStringAnnotations(LINK_TAG, offset, offset).firstOrNull()?.item
+    }
+
+    Text(
+        text = annotated,
+        style = style,
+        color = color,
+        modifier = modifier.pointerInput(annotated) {
+            detectTapGestures(
+                onTap = { position ->
+                    val link = linkAt(position) ?: return@detectTapGestures
+                    val url = openableUrl(link)
+                    runCatching { uriHandler.openUri(url) }.onFailure {
+                        // No browser (or the intent was refused): copying is the useful fallback.
+                        clipboard.setText(AnnotatedString(url))
+                        Toast.makeText(context, openFailed, Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onLongPress = { position ->
+                    val link = linkAt(position) ?: return@detectTapGestures
+                    clipboard.setText(AnnotatedString(openableUrl(link)))
+                }
+            )
+        },
+        onTextLayout = { layout = it }
+    )
 }
 
 @Composable
@@ -2386,14 +2497,15 @@ private fun MarkdownBody(markdown: String) {
                 MdKind.BULLET -> Row {
                     Text("•", style = MaterialTheme.typography.bodyMedium, color = Signal)
                     Spacer(Modifier.width(8.dp))
-                    Text(
-                        block.text,
+                    LinkifiedText(
+                        text = block.text,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Ink2
+                        color = Ink2,
+                        modifier = Modifier.weight(1f)
                     )
                 }
-                MdKind.PARAGRAPH -> Text(
-                    block.text,
+                MdKind.PARAGRAPH -> LinkifiedText(
+                    text = block.text,
                     style = MaterialTheme.typography.bodyMedium,
                     color = Ink2
                 )
@@ -2700,6 +2812,8 @@ private fun NoteDetailScreen(
     var reanalyzeFailed by remember(note.id) { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val clipboard = LocalClipboardManager.current
+    val copyLink = stringResource(R.string.common_link_copy)
     val spaceName = spaces.firstOrNull { it.id == note.spaceId }?.name
     val noteFormat = NoteFormat.from(note.format)
 
@@ -2835,7 +2949,11 @@ private fun NoteDetailScreen(
                 // add a gap under the title.
                 if (note.oneLine.isNotBlank()) {
                     Spacer(Modifier.height(10.dp))
-                    Text(note.oneLine, style = MaterialTheme.typography.bodyLarge, color = Ink2)
+                    LinkifiedText(
+                        text = note.oneLine,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Ink2
+                    )
                 }
             }
         }
@@ -2844,18 +2962,37 @@ private fun NoteDetailScreen(
                 DetailSection(if (noteFormat.ordered) stringResource(R.string.ui_section_steps) else stringResource(R.string.ui_section_items)) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         note.items.forEachIndexed { index, item ->
-                            Row {
+                            val links = remember(item) { linkRanges(item) }
+                            Row(verticalAlignment = Alignment.Top) {
                                 Text(
                                     if (noteFormat.ordered) "${index + 1}" else "•",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = Signal,
                                     modifier = Modifier.width(22.dp)
                                 )
-                                Text(
-                                    item,
+                                LinkifiedText(
+                                    text = item,
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = Ink
+                                    color = Ink,
+                                    modifier = Modifier.weight(1f)
                                 )
+                                // Copying is the other thing you do with a link, and a visible
+                                // button beats discovering a long-press by accident.
+                                if (links.isNotEmpty()) {
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        copyLink,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Signal,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(999.dp))
+                                            .clickable {
+                                                val raw = item.substring(links.first())
+                                                clipboard.setText(AnnotatedString(openableUrl(raw)))
+                                            }
+                                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -2899,20 +3036,32 @@ private fun NoteDetailScreen(
         }
         item {
             DetailSection(stringResource(R.string.ui_section_what_i_said)) {
-                Text(note.verbatim, style = MaterialTheme.typography.bodyMedium, color = Ink)
+                LinkifiedText(
+                    text = note.verbatim,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Ink
+                )
             }
         }
         if (note.why.isNotBlank()) {
             item {
                 DetailSection(stringResource(R.string.ui_section_why_it_matters)) {
-                    Text(note.why, style = MaterialTheme.typography.bodyMedium, color = Blue)
+                    LinkifiedText(
+                        text = note.why,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Blue
+                    )
                 }
             }
         }
         if (note.question.isNotBlank()) {
             item {
                 DetailSection(stringResource(R.string.ui_section_open_question)) {
-                    Text(note.question, style = MaterialTheme.typography.bodyMedium, color = Amber)
+                    LinkifiedText(
+                        text = note.question,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Amber
+                    )
                 }
             }
         }
