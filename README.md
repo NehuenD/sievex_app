@@ -1,84 +1,75 @@
 # Sievex
 
-A personal Android app for capturing a thought by voice while your hands are busy: one earbud tap
-(which the podcast app sees as its own pause), a 20–60 second burst, then a fully on-device pass
-that turns the audio into a structured Markdown note filed into a vault.
+Personal Android app that turns a spoken thought into a structured note, entirely on-device: it
+listens for a podcast pause, records a 20–60 s burst, transcribes it, and shapes it into a note with
+a mode, title, one line, the verbatim text, an inferred *why it matters*, an open question and tags.
 
-No cloud, no accounts. The only network use is the one-time, checksum-pinned model download; after
-that the app is fully offline and nothing you record leaves the phone.
+No cloud, no accounts. The network is used once, for the checksum-pinned model download.
 
-## Pipeline
+## What it does today
 
-```
-earbud tap → CaptureService (armed foreground service, mic closed until a burst)
-           → BurstRecorder (16 kHz mono PCM WAV, 90 s cap)
-           → JobQueue (durable JSON, survives process death)
-           → AsrEngine (sherpa-onnx, Parakeet TDT 0.6B v3 int8, greedy)
-           → Transform (llama.cpp via JNI, LFM3-1.7B Q4_K_M, grammar-constrained JSON)
-           → NoteStore → Markdown in a SAF folder
-```
+**Capture** — an armed foreground service keeps the microphone closed until a burst starts. The
+trigger is the podcast's own pause (notification-listener media session) or the on-screen button.
+Bursts stop on resume or a second tap and are capped at 90 s. Audio is written to a WAV first and
+then queued in a durable JSON queue, so a process death or reboot never loses a burst.
 
-Everything runs on one queue worker, in capture order. ASR and the LLM are serialised on purpose:
-a phone that keeps both resident and runs them at once has no thermal headroom left.
+**Transcribe** — sherpa-onnx with Parakeet TDT 0.6B v3 int8 on the CPU, greedy decoding, up to four
+threads.
 
-Two things run outside that queue: the first-run intro (shown once, stored in
-SharedPreferences), and lens reports over a space. A report can take a minute on a large space, so
-it runs in a `dataSync` foreground service and posts a notification when the report is ready —
-leaving the screen, locking the phone or closing the app does not cancel it.
+**Shape** — LFM3-1.7B Q4_K_M through a small llama.cpp JNI shim. The reply is grammar-constrained
+JSON, so it either parses or cannot be produced: mode, title, one line, why it matters, open
+question, tags. `verbatim` is the ASR text, never regenerated. The recording status names actions
+(transcribing audio → understanding intent → crafting title → creating insights), not models.
+
+**Organise** — notes and spaces are stored on-device (`notes.json`, `spaces.json`; audio as WAV under
+`bursts/`). A space can run lenses — Insight, Brainstorm, Reading, Actions, Tensions, Timeline, plus
+your own. A lens report is built in a `dataSync` foreground service and announced with a
+notification that opens that space and lens; leaving the screen does not cancel it.
+
+**Review** — a Notes list, an Actions view (notes whose mode is Action), and Settings for model
+status/downloads, notification access and the event log.
+
+## Not built yet
+
+- Markdown vault export into a SAF folder (the SPEC's filing step). Today notes are app-private
+  JSON, not `.md` files.
+- Cloud sync, accounts, iOS, live transcript, multi-speaker capture.
 
 ## Stack
 
-- Kotlin + Jetpack Compose, `minSdk 30`, `targetSdk 35`, **arm64-v8a only**
-- sherpa-onnx (prebuilt) for ASR; llama.cpp (prebuilt, custom JNI shim in `app/src/main/cpp`) for the LLM
-- Prebuilt `.so` files live in `app/src/main/jniLibs/arm64-v8a/`; there is no CMake step in Gradle
+Kotlin + Jetpack Compose · `minSdk 30`, `targetSdk 35`, arm64-v8a only · prebuilt sherpa-onnx and
+llama.cpp under `app/src/main/jniLibs` (no CMake step in Gradle).
 
 ## Build
 
-Requirements: JDK 21, Android SDK 36, and NDK `28.2.13676358` (only needed to rebuild the JNI shim).
+Needs JDK 21, Android SDK 36, and NDK `28.2.13676358` (only to rebuild the JNI shim).
 
 ```bash
-./gradlew assembleDebug      # or: ./build-app.sh (rebuilds the shim first when the NDK is present)
+./gradlew assembleDebug        # or ./build-app.sh, which also rebuilds the shim when the NDK exists
+bash spike/build-llm-jni.sh    # app/src/main/cpp/llama_jni.cpp → libsievex_llm.so
 ```
 
-Rebuilding the native shim by hand:
+## Models (downloaded on first run, not in the repo)
 
-```bash
-bash spike/build-llm-jni.sh   # app/src/main/cpp/llama_jni.cpp → libsievex_llm.so
-```
-
-## Models (not in this repository)
-
-| Model | Size | Source |
+| Model | Size | Pinned by |
 |---|---|---|
-| Parakeet TDT 0.6B v3 int8 (encoder/decoder/joiner/tokens) | ~640 MB | downloaded on first run, pinned by SHA-256 in `ModelInstaller.kt` |
-| LFM3-1.7B Q4_K_M GGUF | ~1.1 GB | downloaded on first run, pinned by SHA-256 in `TransformModel.kt` |
+| Parakeet TDT 0.6B v3 int8, four files | ~640 MiB | SHA-256 in `ModelInstaller` |
+| LFM3-1.7B Q4_K_M GGUF | ~1.1 GB | SHA-256 in `TransformModel` |
 
-Both are downloaded by the app itself and verified before install; after that the app is fully
-offline. The model files are gitignored.
+After the download the app runs fully offline.
 
 ## Performance
 
-The ASR/LLM audit and the changes it produced are in
-[docs/performance-audit.md](docs/performance-audit.md): token-budget reduction, grammar-constrained
-JSON, persistent LLM context with KV-prefix reuse, warm models on arm, ASR thread count, and a
-90 s burst cap.
+See [docs/performance-audit.md](docs/performance-audit.md). In short: fewer generated tokens,
+grammar-constrained JSON, one persistent LLM context with KV-prefix reuse, models warmed at arm
+time, ASR threads from the core count, a 90 s burst cap. Benchmarks: `spike/bench.sh <dir-of-wavs> 3`.
 
-On-device benchmarking (no app edits, uses the durable queue's orphan recovery):
+Known gap: the llama.cpp fork the shipped libraries were built from is not in this repo, so the
+tuned ggml build (dotprod/i8mm, optional KleidiAI) cannot be reproduced here yet;
+`spike/build-llama-android.sh` is ready for the day that source is restored.
 
-```bash
-spike/bench.sh <dir-with-16k-mono-wavs> 3
-```
+## Repository notes
 
-One known gap: `spike/llama.cpp` (the fork the shipped libs were built from) is not in this repo,
-so the tuned ggml build (`-DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+i8mm`, optional KleidiAI) cannot be
-reproduced here yet. `spike/build-llama-android.sh` is ready for the day that source is restored.
-
-## Repository hygiene
-
-`local.properties`, `keystore.properties`, `keystore.jks`, build output, `dist/`, model files and
-fetched native sources are gitignored — see [.gitignore](.gitignore). Release signing needs your
-own keystore.
-
-## License
-
-Personal project. No license is granted; all rights reserved.
+`.gitignore` keeps signing material (`keystore.properties`, `*.jks`), `local.properties`, build
+output, `dist/`, model files and fetched native sources out of Git; release signing needs your own
+keystore. Personal project, no license granted.
