@@ -101,6 +101,7 @@ import com.sievex.app.Space
 import com.sievex.app.SpaceStore
 import com.sievex.app.StoredNote
 import com.sievex.app.asr.ModelInstaller
+import com.sievex.app.llm.Lens
 import com.sievex.app.llm.TransformModel
 import java.util.Locale
 import java.util.UUID
@@ -1952,11 +1953,11 @@ private fun LensArtifactCard(
                     if (stale) StaleBadge()
                 }
                 Spacer(Modifier.height(12.dp))
-                MarkdownBody(artifact.body)
+                MarkdownBody(Lens.stripCitations(artifact.body))
                 Spacer(Modifier.height(14.dp))
                 Text(
                     "from ${artifact.covered.size} notes · " +
-                        "${relativeAge(artifact.generatedAt)} · ${artifact.model}",
+                        relativeAge(artifact.generatedAt),
                     style = MaterialTheme.typography.bodySmall,
                     color = Ink2
                 )
@@ -2989,8 +2990,8 @@ private fun CustomLensDialog(
                 Text("New custom lens", style = MaterialTheme.typography.titleMedium, color = Ink)
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "The instruction is the body of the prompt: say what to produce and how to " +
-                        "cite notes as [n<id>]. Headings are enforced on top of it.",
+                    "The instruction is the body of the prompt: say what to produce. " +
+                        "Headings are enforced on top of it.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Ink2
                 )

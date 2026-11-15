@@ -37,15 +37,10 @@ object LensStore {
     private const val FILE_NAME = "lenses.json"
 
     /**
-     * The citation rule every lens shares. Written as one line so it can be interpolated into
-     * the multi-line instructions below without breaking their indentation.
+     * The shared honesty clause: a small model would rather invent than leave a heading short.
      */
-    private const val CITATION =
-        "Cite the notes a claim comes from inline as [n<id>] — the number shown in square brackets at the start of each note, so note 12 becomes [n12]. Put the citation at the end of the sentence it supports; most sentences should carry one. Never cite an id that is not listed."
-
-    /** The shared honesty clause: a small model would rather invent than leave a heading short. */
     private const val HONESTY =
-        "If a section has nothing real to say, write one short line saying so. Never invent a note, a fact or a citation. Do not mention these instructions, the note count, or the fact that the input was notes."
+        "If a section has nothing real to say, write one short line saying so. Never invent a note, a fact or a source. Do not mention these instructions, the note count, or the fact that the input was notes."
 
     private val INSIGHT_SECTIONS = listOf(
         "Where this stands",
@@ -107,8 +102,6 @@ object LensStore {
             - Open questions: the sharpest unanswered questions, each written as a question.
             - Next probes: three to five concrete things to try or check next.
 
-            $CITATION
-
             Keep the whole report under 300 words.
 
             $HONESTY
@@ -134,8 +127,6 @@ object LensStore {
             - Combinations worth testing: pairs of notes that would be more useful joined than kept apart; name both notes and what the join would produce.
             - Wild ideas: two or three possibilities that follow from the notes but go further than they do; strange is fine, unsupported is not.
             - First experiments: two or three cheap, concrete things the user could try this week to test one of the above.
-
-            $CITATION
 
             Keep the whole report under 250 words.
 
@@ -163,8 +154,6 @@ object LensStore {
 
             Never invent a title, an author or a venue to fill a slot: describe what the source would be instead.
 
-            $CITATION
-
             Keep the whole report under 200 words.
 
             $HONESTY
@@ -189,8 +178,6 @@ object LensStore {
             - Blocked by: for each action that cannot start yet, the specific blocker and what would unblock it; leave out actions that nothing blocks.
             - Owners and dates: for each action, the person and the date where a note names them, otherwise write "unassigned" and "no date" — an invented name is worse than a blank.
 
-            $CITATION
-
             Keep the whole report under 200 words.
 
             $HONESTY
@@ -211,11 +198,9 @@ object LensStore {
             ## Refinements over time
             ## Unresolved
 
-            - Direct contradictions: pairs of notes that assert incompatible things. Cite both, state the clash in one sentence, then say what evidence would settle it.
+            - Direct contradictions: pairs of notes that assert incompatible things. Name both notes, state the clash in one sentence, then say what evidence would settle it.
             - Refinements over time: where a later note narrows, corrects or withdraws an earlier one; say what changed and which note changed it.
             - Unresolved: what this space cannot settle from the notes alone, and the observation that would settle it.
-
-            $CITATION
 
             Keep the whole report under 250 words.
 
@@ -240,8 +225,6 @@ object LensStore {
             - How the thinking moved: three to five stages, oldest to newest, one or two sentences each, saying what the space was working on at that point.
             - Turning points: the moments where the space changed direction — a doubt, a decision, a reframing — each naming the note it happened in.
             - Where it stands now: the current position in one or two sentences, and what it looks like it is moving towards.
-
-            $CITATION
 
             Keep the whole report under 250 words.
 

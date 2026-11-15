@@ -90,7 +90,7 @@ object Lens {
             return null
         }
 
-        val body = assemble(raw)
+        val body = stripCitations(assemble(raw))
         if (body.isBlank()) return null
 
         val artifact = LensArtifact(
@@ -187,9 +187,8 @@ object Lens {
             append("<|im_start|>assistant\n##")
         }
 
-    /** One note as a compact, line-per-field block: `[n12]` is the handle the model must cite. */
+    /** One note as a compact, line-per-field block. */
     private fun noteBlock(note: StoredNote): String = buildString {
-        append("[n").append(note.id).append("] ")
         append(flat(note.title, TITLE_CHARS).ifBlank { "(untitled)" })
         append('\n')
         append("mode: ").append(flat(note.mode, 40).ifBlank { "Insight" }).append('\n')
@@ -223,5 +222,19 @@ object Lens {
         body = body.replace(Regex("(?m)^##(?=[^#\\s])"), "## ")
         body = body.replace("<|im_end|>", "").replace("<|im_start|>", "")
         return body.trim()
+    }
+
+    /**
+     * Removes the inline note handles older reports carry (`[n12]`), together with the spacing
+     * they leave behind. The prompt no longer asks for citations, but artifacts already on disk
+     * were written under it, so the UI runs this before rendering as well.
+     */
+    fun stripCitations(text: String): String {
+        if (text.isBlank()) return text
+        return text
+            .replace(Regex("""\s*\[\s*n\s*\d+\s*]"""), "")
+            .replace(Regex("""\(\s*\)"""), "")
+            .replace(Regex("""[ \t]+([;:,.!?])""")) { it.groupValues[1] }
+            .replace(Regex("""[ \t]{2,}"""), " ")
     }
 }
