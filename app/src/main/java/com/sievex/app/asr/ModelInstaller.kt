@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.sievex.app.CaptureLog
 import com.sievex.app.CaptureService
+import com.sievex.app.R
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
@@ -57,6 +58,11 @@ object ModelInstaller {
     var progress by mutableStateOf(0f)
         private set
 
+    /**
+     * Shown by the UI. The initial value is an English fallback because an object has no Context
+     * at class-init; AppUi calls refresh(context) before the card is shown, and every later write
+     * is resolved from resources.
+     */
     var status by mutableStateOf("Speech model not installed")
         private set
 
@@ -68,12 +74,12 @@ object ModelInstaller {
         when {
             installed -> {
                 val mb = AsrEngine.installedBytes(context.filesDir) / (1024 * 1024)
-                status = "Parakeet installed ($mb MB)"
+                status = context.getString(R.string.sys_asr_status_installed, mb)
                 progress = 1f
             }
             busy -> Unit
             failed -> Unit
-            else -> status = "Speech model not installed"
+            else -> status = context.getString(R.string.sys_asr_status_not_installed)
         }
     }
 
@@ -82,7 +88,7 @@ object ModelInstaller {
         busy = true
         failed = false
         progress = 0f
-        status = "Starting download"
+        status = context.getString(R.string.sys_model_starting_download)
 
         val app = context.applicationContext
         Thread {
@@ -100,7 +106,7 @@ object ModelInstaller {
                     }
 
                     val part = File(temp, spec.name + ".part")
-                    status = "Downloading ${spec.name}"
+                    status = app.getString(R.string.sys_asr_status_downloading, spec.name)
                     captureLog("model: ${spec.name} from ${part.length()} bytes")
 
                     fetch(spec, part, doneBytes)
@@ -108,7 +114,7 @@ object ModelInstaller {
                     if (part.length() != spec.bytes) {
                         throw IOException("${spec.name}: size ${part.length()} != ${spec.bytes}")
                     }
-                    status = "Verifying ${spec.name}"
+                    status = app.getString(R.string.sys_asr_status_verifying, spec.name)
                     val digest = sha256(part)
                     if (digest != spec.sha256) {
                         part.delete()
@@ -128,9 +134,12 @@ object ModelInstaller {
                 AsrEngine.unload()
                 installed = AsrEngine.isInstalled(app.filesDir)
                 status = if (installed) {
-                    "Parakeet installed (${AsrEngine.installedBytes(app.filesDir) / (1024 * 1024)} MB)"
+                    app.getString(
+                        R.string.sys_asr_status_installed,
+                        AsrEngine.installedBytes(app.filesDir) / (1024 * 1024)
+                    )
                 } else {
-                    "Download finished but files are incomplete"
+                    app.getString(R.string.sys_asr_status_incomplete)
                 }
                 progress = if (installed) 1f else progress
                 captureLog("model: $status")
@@ -139,7 +148,7 @@ object ModelInstaller {
                 if (installed) CaptureService.kick(app)
             } catch (t: Throwable) {
                 failed = true
-                status = "Download failed: ${t.message}"
+                status = app.getString(R.string.sys_model_download_failed, t.message)
                 captureLog("model: download failed - ${t.message}")
             } finally {
                 busy = false

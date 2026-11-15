@@ -1,6 +1,9 @@
 package com.sievex.app.ui
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -79,6 +82,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -88,6 +92,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.sievex.app.AppLocale
 import com.sievex.app.CaptureLog
 import com.sievex.app.CaptureService
 import com.sievex.app.Formats
@@ -99,6 +104,8 @@ import com.sievex.app.NoteFormat
 import com.sievex.app.NoteStore
 import com.sievex.app.Pipeline
 import com.sievex.app.PipelineStage
+import com.sievex.app.PipelineStep
+import com.sievex.app.R
 import com.sievex.app.Space
 import com.sievex.app.SpaceStore
 import com.sievex.app.StoredNote
@@ -243,6 +250,80 @@ private fun modeColor(mode: String): Color = when (mode) {
     "Reference" -> Ink2
     "Question" -> Amber
     else -> Ink2
+}
+
+// --------------------------------------------------------------------------- localised vocabulary
+//
+// Modes, formats and built-in lenses are stored as canonical English data (the Actions tab filters
+// on "Action", the LLM grammar emits "insight", artifacts are keyed by lens id), so the display
+// layer translates them instead of the data. Unknown values fall through unchanged, which is what
+// keeps custom lenses and future modes readable.
+
+@Composable
+private fun modeLabel(mode: String): String = when (mode) {
+    "Insight" -> stringResource(R.string.mode_insight)
+    "Idea" -> stringResource(R.string.mode_idea)
+    "Action" -> stringResource(R.string.mode_action)
+    "Reference" -> stringResource(R.string.mode_reference)
+    "Question" -> stringResource(R.string.mode_question)
+    "Reflection" -> stringResource(R.string.mode_reflection)
+    "Note" -> stringResource(R.string.mode_note)
+    else -> mode
+}
+
+@Composable
+private fun formatLabel(format: NoteFormat): String = when (format) {
+    NoteFormat.NOTE -> stringResource(R.string.format_note)
+    NoteFormat.LIST -> stringResource(R.string.format_list)
+    NoteFormat.STEPS -> stringResource(R.string.format_steps)
+    NoteFormat.PLAIN -> stringResource(R.string.format_plain)
+}
+
+@Composable
+private fun formatBlurb(format: NoteFormat): String = when (format) {
+    NoteFormat.NOTE -> stringResource(R.string.format_note_blurb)
+    NoteFormat.LIST -> stringResource(R.string.format_list_blurb)
+    NoteFormat.STEPS -> stringResource(R.string.format_steps_blurb)
+    NoteFormat.PLAIN -> stringResource(R.string.format_plain_blurb)
+}
+
+/** Built-in lenses are translated by id; a custom lens keeps the words the user gave it. */
+@Composable
+private fun lensName(spec: LensSpec): String = when (spec.id) {
+    "insight" -> stringResource(R.string.lens_insight_name)
+    "brainstorm" -> stringResource(R.string.lens_brainstorm_name)
+    "reading" -> stringResource(R.string.lens_reading_name)
+    "actions" -> stringResource(R.string.lens_actions_name)
+    "tensions" -> stringResource(R.string.lens_tensions_name)
+    "timeline" -> stringResource(R.string.lens_timeline_name)
+    else -> spec.name
+}
+
+@Composable
+private fun lensDescription(spec: LensSpec): String = when (spec.id) {
+    "insight" -> stringResource(R.string.lens_insight_description)
+    "brainstorm" -> stringResource(R.string.lens_brainstorm_description)
+    "reading" -> stringResource(R.string.lens_reading_description)
+    "actions" -> stringResource(R.string.lens_actions_description)
+    "tensions" -> stringResource(R.string.lens_tensions_description)
+    "timeline" -> stringResource(R.string.lens_timeline_description)
+    else -> spec.description
+}
+
+/** "Today 15:36" is stored data; only its day word is translated at display time. */
+@Composable
+private fun whenLabel(text: String): String =
+    if (text.startsWith("Today ")) {
+        stringResource(R.string.common_today) + text.removePrefix("Today")
+    } else {
+        text
+    }
+
+/** The nearest Activity, through the configuration wrappers [AppLocale] and Compose introduce. */
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 @Composable
@@ -494,7 +575,7 @@ fun SievexApp(
         containerColor = Canvas,
         bottomBar = {
             NavigationBar(containerColor = Surface1, tonalElevation = 0.dp) {
-                NavItem(0, "Record", tab, { tab = it }) {
+                NavItem(0, stringResource(R.string.ui_tab_record), tab, { tab = it }) {
                     Box(
                         Modifier
                             .size(14.dp)
@@ -502,17 +583,17 @@ fun SievexApp(
                             .background(if (tab == 0) Signal else Ink2)
                     )
                 }
-                NavItem(1, "Spaces", tab, { tab = it }) {
-                    Icon(Icons.Filled.List, contentDescription = "Spaces", modifier = Modifier.size(22.dp))
+                NavItem(1, stringResource(R.string.ui_tab_spaces), tab, { tab = it }) {
+                    Icon(Icons.Filled.List, contentDescription = stringResource(R.string.ui_tab_spaces), modifier = Modifier.size(22.dp))
                 }
-                NavItem(2, "Notes", tab, { tab = it }) {
-                    Icon(Icons.Filled.Home, contentDescription = "Notes", modifier = Modifier.size(22.dp))
+                NavItem(2, stringResource(R.string.ui_tab_notes), tab, { tab = it }) {
+                    Icon(Icons.Filled.Home, contentDescription = stringResource(R.string.ui_tab_notes), modifier = Modifier.size(22.dp))
                 }
-                NavItem(3, "Actions", tab, { tab = it }) {
-                    Icon(Icons.Filled.Check, contentDescription = "Actions", modifier = Modifier.size(22.dp))
+                NavItem(3, stringResource(R.string.ui_tab_actions), tab, { tab = it }) {
+                    Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.ui_tab_actions), modifier = Modifier.size(22.dp))
                 }
-                NavItem(4, "Settings", tab, { tab = it }) {
-                    Icon(Icons.Filled.Settings, contentDescription = "Settings", modifier = Modifier.size(22.dp))
+                NavItem(4, stringResource(R.string.ui_tab_settings), tab, { tab = it }) {
+                    Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.ui_tab_settings), modifier = Modifier.size(22.dp))
                 }
             }
         }
@@ -606,7 +687,7 @@ fun SievexApp(
 
     if (pickingCurrentSpace) {
         SpacePickerDialog(
-            title = "Record into space",
+            title = stringResource(R.string.ui_space_picker_record_title),
             spaces = spaces,
             selectedId = currentSpaceId,
             onSelect = { spaceId ->
@@ -623,8 +704,8 @@ fun SievexApp(
 
     if (namingNewSpace) {
         SpaceNameDialog(
-            title = "New space",
-            confirmLabel = "Create space",
+            title = stringResource(R.string.ui_space_new),
+            confirmLabel = stringResource(R.string.ui_space_create),
             onDismiss = { namingNewSpace = false },
             onConfirm = { name ->
                 namingNewSpace = false
@@ -643,9 +724,9 @@ fun SievexApp(
     val spaceToDelete = deletingSpace
     if (spaceToDelete != null) {
         ConfirmDialog(
-            title = "Delete \"${spaceToDelete.name}\"?",
-            body = "Its reports are deleted with it. The notes inside are kept and move to No space.",
-            confirmLabel = "Delete space",
+            title = stringResource(R.string.ui_space_delete_title, spaceToDelete.name),
+            body = stringResource(R.string.ui_space_delete_body),
+            confirmLabel = stringResource(R.string.ui_space_delete_confirm),
             onConfirm = {
                 deletingSpace = null
                 // Delete rewrites spaces.json and detaches notes: off the frame thread.
@@ -696,7 +777,7 @@ private fun ScreenHeader(title: String, subtitle: String? = null) {
                     .background(Signal, CircleShape)
             )
             Spacer(Modifier.width(8.dp))
-            Text("SievexAI", style = MaterialTheme.typography.labelSmall, color = Ink2)
+            Text(stringResource(R.string.ui_brand_name), style = MaterialTheme.typography.labelSmall, color = Ink2)
         }
         Spacer(Modifier.height(10.dp))
         Text(title, style = MaterialTheme.typography.headlineMedium, color = Ink)
@@ -759,9 +840,9 @@ private fun CaptureCard(
                 Spacer(Modifier.width(10.dp))
                 Text(
                     when {
-                        recording -> "RECORDING"
-                        armed -> "ARMED"
-                        else -> "READY"
+                        recording -> stringResource(R.string.ui_capture_status_recording)
+                        armed -> stringResource(R.string.ui_capture_status_armed)
+                        else -> stringResource(R.string.ui_capture_status_ready)
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = if (live) Signal else Ink2
@@ -770,9 +851,9 @@ private fun CaptureCard(
             Spacer(Modifier.height(10.dp))
             Text(
                 when {
-                    recording -> "Capturing your burst."
-                    armed -> "Listening. Tap pause on your podcast, or record now."
-                    else -> "Arm to start listening for a podcast pause."
+                    recording -> stringResource(R.string.ui_capture_body_recording)
+                    armed -> stringResource(R.string.ui_capture_body_armed)
+                    else -> stringResource(R.string.ui_capture_body_ready)
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = Ink
@@ -786,7 +867,7 @@ private fun CaptureCard(
                     modifier = Modifier.clickable { onNotifAccess() }
                 ) {
                     Text(
-                        "Enable notification access",
+                        stringResource(R.string.ui_capture_enable_notification_access),
                         style = MaterialTheme.typography.labelMedium,
                         color = Blue,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp)
@@ -797,12 +878,12 @@ private fun CaptureCard(
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 when {
-                    recording -> PillButton("Stop", Signal, Color.White, onStop)
+                    recording -> PillButton(stringResource(R.string.ui_action_stop), Signal, Color.White, onStop)
                     armed -> {
-                        PillButton("Record now", Surface2, Ink, onRecord)
-                        PillButton("Disarm", Surface2, Ink2, onDisarm)
+                        PillButton(stringResource(R.string.ui_capture_record_now), Surface2, Ink, onRecord)
+                        PillButton(stringResource(R.string.ui_capture_disarm), Surface2, Ink2, onDisarm)
                     }
-                    else -> PillButton("Arm capture", Signal, Color.White, onArm)
+                    else -> PillButton(stringResource(R.string.ui_capture_arm), Signal, Color.White, onArm)
                 }
             }
         }
@@ -817,7 +898,7 @@ private fun ModeChip(mode: String) {
             .border(1.dp, c.copy(alpha = 0.5f), CircleShape)
             .padding(horizontal = 10.dp, vertical = 4.dp)
     ) {
-        Text(mode.uppercase(), style = MaterialTheme.typography.labelSmall, color = c)
+        Text(modeLabel(mode).uppercase(), style = MaterialTheme.typography.labelSmall, color = c)
     }
 }
 
@@ -832,7 +913,7 @@ private fun EditedBadge() {
             .border(1.dp, Line, CircleShape)
             .padding(horizontal = 8.dp, vertical = 3.dp)
     ) {
-        Text("edited", style = MaterialTheme.typography.labelSmall, color = Ink2)
+        Text(stringResource(R.string.ui_note_edited), style = MaterialTheme.typography.labelSmall, color = Ink2)
     }
 }
 
@@ -853,7 +934,7 @@ private fun NoteCard(note: NoteItem, onClick: () -> Unit) {
                     EditedBadge()
                     Spacer(Modifier.width(8.dp))
                 }
-                Text(note.whenText, style = MaterialTheme.typography.labelSmall, color = Ink2)
+                Text(whenLabel(note.whenText), style = MaterialTheme.typography.labelSmall, color = Ink2)
             }
             Spacer(Modifier.height(12.dp))
             Text(
@@ -891,10 +972,10 @@ private fun ModelSetupCard() {
             .border(1.dp, Blue.copy(alpha = 0.45f), RoundedCornerShape(24.dp))
     ) {
         Column(Modifier.padding(18.dp)) {
-            Text("SPEECH MODEL", style = MaterialTheme.typography.labelSmall, color = Blue)
+            Text(stringResource(R.string.ui_speech_model), style = MaterialTheme.typography.labelSmall, color = Blue)
             Spacer(Modifier.height(8.dp))
             Text(
-                "One-time download, 640 MB. Everything runs on-device afterwards.",
+                stringResource(R.string.ui_speech_model_blurb),
                 style = MaterialTheme.typography.bodySmall,
                 color = Ink2
             )
@@ -916,7 +997,7 @@ private fun ModelSetupCard() {
                     modifier = Modifier.clickable { ModelInstaller.download(context) }
                 ) {
                     Text(
-                        "Download speech model",
+                        stringResource(R.string.ui_speech_model_download),
                         style = MaterialTheme.typography.labelMedium,
                         color = Color.White,
                         modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
@@ -943,10 +1024,10 @@ private fun TransformSetupCard() {
             .border(1.dp, Mint.copy(alpha = 0.45f), RoundedCornerShape(24.dp))
     ) {
         Column(Modifier.padding(18.dp)) {
-            Text("TRANSFORM MODEL", style = MaterialTheme.typography.labelSmall, color = Mint)
+            Text(stringResource(R.string.ui_transform_model), style = MaterialTheme.typography.labelSmall, color = Mint)
             Spacer(Modifier.height(8.dp))
             Text(
-                "LFM3-1.7B, 1.1 GB. Gives every note its mode, title, why it matters and an open question.",
+                stringResource(R.string.ui_transform_model_blurb),
                 style = MaterialTheme.typography.bodySmall,
                 color = Ink2
             )
@@ -968,7 +1049,7 @@ private fun TransformSetupCard() {
                     modifier = Modifier.clickable { TransformModel.download(context) }
                 ) {
                     Text(
-                        "Download transform model",
+                        stringResource(R.string.ui_transform_model_download),
                         style = MaterialTheme.typography.labelMedium,
                         color = Color(0xFF00382F),
                         modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
@@ -1021,8 +1102,8 @@ private fun RecordScreen(
             .background(Canvas)
     ) {
         ScreenHeader(
-            "Record",
-            if (modelsReady) "Tap to capture, tap again to stop" else "Finish setup first"
+            stringResource(R.string.ui_tab_record),
+            if (modelsReady) stringResource(R.string.ui_record_subtitle_ready) else stringResource(R.string.ui_record_subtitle_setup)
         )
 
         if (!modelsReady) {
@@ -1041,8 +1122,7 @@ private fun RecordScreen(
                 }
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    "The speech model is always needed. Shaping a Note, List or Steps also needs " +
-                        "the transform model; Plain does not.",
+                    stringResource(R.string.ui_record_setup_body),
                     style = MaterialTheme.typography.bodySmall,
                     color = Ink2,
                     modifier = Modifier.padding(horizontal = 20.dp)
@@ -1071,30 +1151,30 @@ private fun RecordScreen(
                 // Action labels, not model names: the phone is doing something, and what it is
                 // doing is the only thing worth putting on this card.
                 PipelineStage.TRANSCRIBING -> StatusCard(
-                    title = "TRANSCRIBING AUDIO",
+                    title = stringResource(R.string.ui_record_stage_transcribing),
                     body = "",
                     accent = Blue
                 )
                 PipelineStage.TRANSFORMING -> StatusCard(
-                    title = Pipeline.step.ifBlank { "Understanding intent" }.uppercase(Locale.US),
+                    title = pipelineStepLabel(Pipeline.step).uppercase(Locale.US),
                     body = "",
                     accent = Mint
                 )
                 PipelineStage.DONE -> DoneCard(Pipeline.lastTitle, onOpenNotes)
                 PipelineStage.FAILED -> StatusCard(
-                    title = "NOTHING FILED",
+                    title = stringResource(R.string.ui_record_stage_failed),
                     body = Pipeline.detail,
                     accent = Red
                 )
                 PipelineStage.IDLE -> {
                     Text(
-                        if (recording) formatDuration(elapsed) else "Tap to record",
+                        if (recording) formatDuration(elapsed) else stringResource(R.string.ui_record_tap_to_record),
                         style = MaterialTheme.typography.headlineSmall,
                         color = if (recording) Signal else Ink
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        if (recording) "Recording" else "Press the circle, speak, press again",
+                        if (recording) stringResource(R.string.ui_record_recording) else stringResource(R.string.ui_record_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = Ink2
                     )
@@ -1105,7 +1185,7 @@ private fun RecordScreen(
                         modifier = Modifier.clickable { if (armed) onDisarm() else onArm() }
                     ) {
                         Text(
-                            if (armed) "Podcast trigger: on" else "Podcast trigger: off",
+                            if (armed) stringResource(R.string.ui_record_podcast_trigger_on) else stringResource(R.string.ui_record_podcast_trigger_off),
                             style = MaterialTheme.typography.labelMedium,
                             color = if (armed) Signal else Ink2,
                             modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
@@ -1122,6 +1202,23 @@ private fun RecordScreen(
             Spacer(Modifier.height(28.dp))
         }
     }
+}
+
+/**
+ * The step label the status card shows. [Pipeline] carries a key, not a sentence, so the same
+ * service state reads in whatever language the UI is in.
+ */
+@Composable
+private fun pipelineStepLabel(step: PipelineStep?): String = when (step) {
+    PipelineStep.DICTATION -> stringResource(R.string.step_dictation)
+    PipelineStep.TITLE -> stringResource(R.string.step_title)
+    PipelineStep.SUMMARY -> stringResource(R.string.step_summary)
+    PipelineStep.ITEMS -> stringResource(R.string.step_items)
+    PipelineStep.STEPS -> stringResource(R.string.step_steps)
+    PipelineStep.INSIGHTS -> stringResource(R.string.step_insights)
+    PipelineStep.TAGS -> stringResource(R.string.step_tags)
+    PipelineStep.SAVING -> stringResource(R.string.step_saving)
+    PipelineStep.INTENT, null -> stringResource(R.string.step_intent)
 }
 
 @Composable
@@ -1167,7 +1264,7 @@ private fun DoneCard(title: String, onOpenNotes: () -> Unit) {
             .border(1.dp, Signal, RoundedCornerShape(20.dp))
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("NOTE READY", style = MaterialTheme.typography.labelSmall, color = Signal)
+            Text(stringResource(R.string.ui_record_note_ready), style = MaterialTheme.typography.labelSmall, color = Signal)
             Spacer(Modifier.height(8.dp))
             Text(
                 title,
@@ -1183,7 +1280,7 @@ private fun DoneCard(title: String, onOpenNotes: () -> Unit) {
                 modifier = Modifier.clickable { onOpenNotes() }
             ) {
                 Text(
-                    "View in Notes",
+                    stringResource(R.string.ui_record_view_in_notes),
                     style = MaterialTheme.typography.labelMedium,
                     color = Color.White,
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
@@ -1277,8 +1374,8 @@ private fun NotesScreen(
         item {
             Column {
                 ScreenHeader(
-                    "Notes",
-                    if (notes.size == 1) "1 note" else "${notes.size} notes"
+                    stringResource(R.string.ui_tab_notes),
+                    if (notes.size == 1) stringResource(R.string.ui_notes_count_one) else stringResource(R.string.ui_notes_count_many, notes.size)
                 )
                 // Part of the header copy, not a bar above the list: writing a note is the same
                 // kind of act as capturing one, so it sits with the title it belongs to.
@@ -1288,7 +1385,7 @@ private fun NotesScreen(
                         .padding(horizontal = 20.dp),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    PillButton("New note", Signal, Color.White, onNewNote)
+                    PillButton(stringResource(R.string.ui_notes_new_note), Signal, Color.White, onNewNote)
                 }
                 Spacer(Modifier.height(12.dp))
                 CaptureCard(
@@ -1303,7 +1400,7 @@ private fun NotesScreen(
                 )
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    "RECENT",
+                    stringResource(R.string.ui_notes_recent),
                     style = MaterialTheme.typography.labelSmall,
                     color = Ink2,
                     modifier = Modifier.padding(horizontal = 20.dp)
@@ -1314,7 +1411,7 @@ private fun NotesScreen(
         if (notes.isEmpty()) {
             item {
                 Text(
-                    "Nothing captured yet. Arm capture, import the model in Settings, then tap pause on your podcast.",
+                    stringResource(R.string.ui_notes_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Ink2,
                     modifier = Modifier.padding(20.dp)
@@ -1350,7 +1447,7 @@ private fun SpaceChip(spaceName: String?, onClick: () -> Unit) {
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                if (active) "Space: $spaceName" else "Space: none",
+                if (active) stringResource(R.string.ui_space_chip_active, spaceName.orEmpty()) else stringResource(R.string.ui_space_chip_none),
                 style = MaterialTheme.typography.labelMedium,
                 color = if (active) Signal else Ink2,
                 maxLines = 1,
@@ -1396,7 +1493,7 @@ private fun FormatChips(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         NoteFormat.entries.forEach { format ->
-            SubTab(format.label, format == selected) { onSelect(format) }
+            SubTab(formatLabel(format), format == selected) { onSelect(format) }
         }
     }
 }
@@ -1412,7 +1509,7 @@ private fun FormatPicker() {
     val context = LocalContext.current
     Column(Modifier.fillMaxWidth()) {
         Text(
-            "FORMAT",
+            stringResource(R.string.ui_section_format),
             style = MaterialTheme.typography.labelSmall,
             color = Ink2,
             modifier = Modifier
@@ -1429,7 +1526,7 @@ private fun FormatPicker() {
 }
 
 @Composable
-private fun StaleBadge(label: String = "STALE") {
+private fun StaleBadge(label: String = stringResource(R.string.ui_stale)) {
     Box(
         Modifier
             .border(1.dp, Amber.copy(alpha = 0.6f), CircleShape)
@@ -1456,13 +1553,13 @@ private fun SpacesScreen(
     ) {
         item {
             Column {
-                ScreenHeader("Spaces", "One container for related notes.")
+                ScreenHeader(stringResource(R.string.ui_tab_spaces), stringResource(R.string.ui_spaces_subtitle))
                 Row(Modifier.padding(horizontal = 20.dp)) {
-                    PillButton("New space", Signal, Color.White, onNewSpace)
+                    PillButton(stringResource(R.string.ui_space_new), Signal, Color.White, onNewSpace)
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Hold a space to delete it.",
+                    stringResource(R.string.ui_spaces_hold_to_delete),
                     style = MaterialTheme.typography.bodySmall,
                     color = Ink2,
                     modifier = Modifier.padding(horizontal = 20.dp)
@@ -1473,7 +1570,7 @@ private fun SpacesScreen(
         if (spaces.isEmpty()) {
             item {
                 Text(
-                    "No spaces yet. A space groups related notes; its insight is a transform over all of them.",
+                    stringResource(R.string.ui_spaces_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Ink2,
                     modifier = Modifier.padding(20.dp)
@@ -1510,8 +1607,8 @@ private fun SpaceRow(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
-                onClickLabel = "Open space",
-                onLongClickLabel = "Delete space",
+                onClickLabel = stringResource(R.string.ui_space_open_action),
+                onLongClickLabel = stringResource(R.string.ui_space_delete_confirm),
                 onLongClick = onLongClick,
                 onClick = onClick
             )
@@ -1533,14 +1630,14 @@ private fun SpaceRow(
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    if (noteCount == 1) "1 note" else "$noteCount notes",
+                    if (noteCount == 1) stringResource(R.string.ui_notes_count_one) else stringResource(R.string.ui_notes_count_many, noteCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = Ink2
                 )
             }
             Spacer(Modifier.width(12.dp))
             Text(
-                if (insight == null) "no report yet" else "report ${relativeAge(insight.generatedAt)}",
+                if (insight == null) stringResource(R.string.ui_space_no_report) else stringResource(R.string.ui_space_report_age, relativeAge(insight.generatedAt)),
                 style = MaterialTheme.typography.labelSmall,
                 color = Ink2
             )
@@ -1721,7 +1818,7 @@ private fun SpaceScreen(
         ) {
             Icon(
                 Icons.Filled.ArrowBack,
-                contentDescription = "Back",
+                contentDescription = stringResource(R.string.ui_action_back),
                 tint = Ink,
                 modifier = Modifier
                     .size(40.dp)
@@ -1729,9 +1826,9 @@ private fun SpaceScreen(
                     .padding(8.dp)
             )
             Spacer(Modifier.width(6.dp))
-            Text("SPACE", style = MaterialTheme.typography.labelSmall, color = Ink2)
+            Text(stringResource(R.string.ui_section_space), style = MaterialTheme.typography.labelSmall, color = Ink2)
             Spacer(Modifier.weight(1f))
-            PillButton("Edit", Surface2, Ink, { editingSpace = true })
+            PillButton(stringResource(R.string.ui_action_edit), Surface2, Ink, { editingSpace = true })
         }
         Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
             Text(
@@ -1743,7 +1840,7 @@ private fun SpaceScreen(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                if (spaceNotes.size == 1) "1 note" else "${spaceNotes.size} notes",
+                if (spaceNotes.size == 1) stringResource(R.string.ui_notes_count_one) else stringResource(R.string.ui_notes_count_many, spaceNotes.size),
                 style = MaterialTheme.typography.bodySmall,
                 color = Ink2
             )
@@ -1761,8 +1858,8 @@ private fun SpaceScreen(
             Modifier.padding(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            SubTab("Notes", sub == 0) { sub = 0 }
-            SubTab("Insights", sub == 1) { sub = 1 }
+            SubTab(stringResource(R.string.ui_tab_notes), sub == 0) { sub = 0 }
+            SubTab(stringResource(R.string.ui_space_insights_subtab), sub == 1) { sub = 1 }
         }
         Spacer(Modifier.height(12.dp))
 
@@ -1777,7 +1874,7 @@ private fun SpaceScreen(
                 if (spaceNotes.isEmpty()) {
                     item {
                         Text(
-                            "No notes in this space yet. Open a note from Notes and set its Space row.",
+                            stringResource(R.string.ui_space_empty_notes),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Ink2,
                             modifier = Modifier.padding(20.dp)
@@ -1818,7 +1915,7 @@ private fun SpaceScreen(
                 if (lenses.isNotEmpty()) {
                     item {
                         Text(
-                            "Hold a chip to remove that lens from this space.",
+                            stringResource(R.string.ui_space_hold_chip_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = Ink2,
                             modifier = Modifier.padding(horizontal = 20.dp)
@@ -1842,7 +1939,7 @@ private fun SpaceScreen(
                             Column(Modifier.padding(horizontal = 20.dp)) {
                                 val busy = runningLensId != null
                                 PillButton(
-                                    label = if (shown == null) "Generate" else "Regenerate",
+                                    label = if (shown == null) stringResource(R.string.ui_lens_generate) else stringResource(R.string.ui_lens_regenerate),
                                     background = if (busy || spaceNotes.isEmpty()) Surface2 else Signal,
                                     foreground = if (busy || spaceNotes.isEmpty()) Ink2 else Color.White,
                                     onClick = { generate(lens) },
@@ -1857,8 +1954,7 @@ private fun SpaceScreen(
                                     )
                                     Spacer(Modifier.height(6.dp))
                                     Text(
-                                        "Working in the background. You can leave this screen — " +
-                                            "we'll notify you when the report is ready.",
+                                        stringResource(R.string.ui_lens_working),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = Ink2
                                     )
@@ -1866,8 +1962,7 @@ private fun SpaceScreen(
                                 if (failedLensId == lens.id) {
                                     Spacer(Modifier.height(10.dp))
                                     Text(
-                                        "No report produced. Check the transform model in " +
-                                            "Settings, then try again.",
+                                        stringResource(R.string.ui_lens_failed),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = Red
                                     )
@@ -1875,16 +1970,14 @@ private fun SpaceScreen(
                                 if (spaceNotes.isEmpty()) {
                                     Spacer(Modifier.height(10.dp))
                                     Text(
-                                        "A space needs at least one note before a lens can " +
-                                            "say anything.",
+                                        stringResource(R.string.ui_lens_needs_notes),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = Ink2
                                     )
                                 } else if (stale) {
                                     Spacer(Modifier.height(10.dp))
                                     Text(
-                                        "Notes changed since this was generated. Regenerate " +
-                                            "to bring it current.",
+                                        stringResource(R.string.ui_lens_stale_hint),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = Amber
                                     )
@@ -1969,12 +2062,13 @@ private fun LensChip(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
+    val name = lensName(spec)
     Surface(
         color = if (selected) SignalSoft else Surface2,
         shape = RoundedCornerShape(999.dp),
         modifier = Modifier.combinedClickable(
-            onClickLabel = "Show ${spec.name}",
-            onLongClickLabel = "Remove ${spec.name} from this space",
+            onClickLabel = stringResource(R.string.ui_lens_show_action, name),
+            onLongClickLabel = stringResource(R.string.ui_lens_remove_action, name),
             onLongClick = onLongClick,
             onClick = onClick
         )
@@ -1984,7 +2078,7 @@ private fun LensChip(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                spec.name,
+                name,
                 style = MaterialTheme.typography.labelMedium,
                 color = if (selected) Signal else Ink2
             )
@@ -2009,7 +2103,7 @@ private fun AddLensChip(onClick: () -> Unit) {
             .clickable { onClick() }
             .padding(horizontal = 16.dp, vertical = 9.dp)
     ) {
-        Text("+ Add lens", style = MaterialTheme.typography.labelMedium, color = Ink2)
+        Text(stringResource(R.string.ui_lens_add_chip), style = MaterialTheme.typography.labelMedium, color = Ink2)
     }
 }
 
@@ -2035,42 +2129,41 @@ private fun LensArtifactCard(
             val lens = spec
             if (lens == null) {
                 Text(
-                    "NO LENSES ON THIS SPACE",
+                    stringResource(R.string.ui_lens_none_title),
                     style = MaterialTheme.typography.labelSmall,
                     color = Ink2
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "A lens is one way of reading every note in this space: it picks the " +
-                        "headings, cites the notes it used, and can be regenerated any time.",
+                    stringResource(R.string.ui_lens_none_body),
                     style = MaterialTheme.typography.bodySmall,
                     color = Ink2
                 )
                 Spacer(Modifier.height(14.dp))
-                PillButton("Add a lens", Signal, Color.White, onAddLens)
+                PillButton(stringResource(R.string.ui_lens_add), Signal, Color.White, onAddLens)
             } else if (artifact == null) {
+                val lensLabel = lensName(lens)
                 Text(
-                    "NO ${lens.name.uppercase()} YET",
+                    stringResource(R.string.ui_lens_empty_title, lensLabel.uppercase()),
                     style = MaterialTheme.typography.labelSmall,
                     color = Ink2
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    lens.description,
+                    lensDescription(lens),
                     style = MaterialTheme.typography.bodySmall,
                     color = Ink2
                 )
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    "It reads every note in this space and cites the ones it used. " +
-                        "Nothing is written until you generate it.",
+                    stringResource(R.string.ui_lens_empty_body),
                     style = MaterialTheme.typography.bodySmall,
                     color = Ink2
                 )
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        lens.name.uppercase(),
+                        lensName(lens).uppercase(),
                         style = MaterialTheme.typography.labelSmall,
                         color = Signal
                     )
@@ -2081,8 +2174,7 @@ private fun LensArtifactCard(
                 MarkdownBody(Lens.stripCitations(artifact.body))
                 Spacer(Modifier.height(14.dp))
                 Text(
-                    "from ${artifact.covered.size} notes · " +
-                        relativeAge(artifact.generatedAt),
+                    stringResource(R.string.ui_lens_from_notes, artifact.covered.size, relativeAge(artifact.generatedAt)),
                     style = MaterialTheme.typography.bodySmall,
                     color = Ink2
                 )
@@ -2111,7 +2203,7 @@ private fun ConfirmDialog(
                 Text(body, style = MaterialTheme.typography.bodySmall, color = Ink2)
                 Spacer(Modifier.height(18.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    PillButton("Cancel", Surface2, Ink2, onDismiss)
+                    PillButton(stringResource(R.string.ui_action_cancel), Surface2, Ink2, onDismiss)
                     Spacer(Modifier.width(10.dp))
                     PillButton(confirmLabel, Red, Color.White, onConfirm)
                 }
@@ -2142,7 +2234,7 @@ private fun SpacePickerDialog(
                         .heightIn(max = 360.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
-                    PickerRow("No space", selectedId == null) { onSelect(null) }
+                    PickerRow(stringResource(R.string.ui_space_none), selectedId == null) { onSelect(null) }
                     spaces.forEach { space ->
                         Spacer(Modifier.height(6.dp))
                         PickerRow(space.name, selectedId == space.id) { onSelect(space.id) }
@@ -2150,7 +2242,7 @@ private fun SpacePickerDialog(
                     if (spaces.isEmpty()) {
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "No spaces yet. Make one in the Spaces tab.",
+                            stringResource(R.string.ui_space_picker_empty),
                             style = MaterialTheme.typography.bodySmall,
                             color = Ink2
                         )
@@ -2158,7 +2250,7 @@ private fun SpacePickerDialog(
                 }
                 Spacer(Modifier.height(16.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    PillButton("Cancel", Surface2, Ink2, onDismiss)
+                    PillButton(stringResource(R.string.ui_action_cancel), Surface2, Ink2, onDismiss)
                 }
             }
         }
@@ -2226,7 +2318,7 @@ private fun SpaceNameDialog(
                 ) {
                     if (name.isEmpty()) {
                         Text(
-                            "Name this space",
+                            stringResource(R.string.ui_space_name_placeholder),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Ink2
                         )
@@ -2248,7 +2340,7 @@ private fun SpaceNameDialog(
                 }
                 Spacer(Modifier.height(16.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    PillButton("Cancel", Surface2, Ink2, onDismiss)
+                    PillButton(stringResource(R.string.ui_action_cancel), Surface2, Ink2, onDismiss)
                     Spacer(Modifier.width(10.dp))
                     PillButton(
                         confirmLabel,
@@ -2361,16 +2453,16 @@ private fun parseMarkdown(markdown: String): List<MdBlock> {
 }
 
 /** "just now", "4m ago", "2h ago", "3d ago". Ages are re-read on every poll tick. */
+@Composable
 private fun relativeAge(timestamp: Long): String {
-    if (timestamp <= 0L) return "never"
     val diff = System.currentTimeMillis() - timestamp
-    if (diff <= 0L) return "just now"
     return when {
-        diff < 60_000L -> "just now"
-        diff < 3_600_000L -> "${diff / 60_000L}m ago"
-        diff < 86_400_000L -> "${diff / 3_600_000L}h ago"
-        diff < 604_800_000L -> "${diff / 86_400_000L}d ago"
-        else -> "${diff / 604_800_000L}w ago"
+        timestamp <= 0L -> stringResource(R.string.ui_age_never)
+        diff <= 60_000L -> stringResource(R.string.ui_age_just_now)
+        diff < 3_600_000L -> stringResource(R.string.ui_age_minutes, diff / 60_000L)
+        diff < 86_400_000L -> stringResource(R.string.ui_age_hours, diff / 3_600_000L)
+        diff < 604_800_000L -> stringResource(R.string.ui_age_days, diff / 86_400_000L)
+        else -> stringResource(R.string.ui_age_weeks, diff / 604_800_000L)
     }
 }
 
@@ -2416,11 +2508,11 @@ private fun ActionsScreen(actions: List<NoteItem>) {
             .background(Canvas),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item { ScreenHeader("Actions", actions.size.toString() + " pending") }
+        item { ScreenHeader(stringResource(R.string.ui_tab_actions), stringResource(R.string.ui_actions_pending, actions.size)) }
         if (actions.isEmpty()) {
             item {
                 Text(
-                    "Nothing pending. Action-mode captures land here.",
+                    stringResource(R.string.ui_actions_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Ink2,
                     modifier = Modifier.padding(20.dp)
@@ -2451,9 +2543,42 @@ private fun ActionsScreen(actions: List<NoteItem>) {
     }
 }
 
+/**
+ * The one switch that changes both the app's language and the language the model writes notes and
+ * reports in. The activity is recreated on change, so every resource re-resolves immediately.
+ */
 @Composable
-private fun SettingsScreen(armed: Boolean, recording: Boolean, tick: Int) {
+private fun LanguageSetting() {
     val context = LocalContext.current
+    val activity = context.findActivity()
+    val spanish = AppLocale.language(context) == AppLocale.SPANISH
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(R.string.common_language),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Ink
+            )
+            Spacer(Modifier.weight(1f))
+            SubTab(stringResource(R.string.common_language_english), !spanish) {
+                activity?.let { AppLocale.set(it, AppLocale.ENGLISH) }
+            }
+            Spacer(Modifier.width(8.dp))
+            SubTab(stringResource(R.string.common_language_spanish), spanish) {
+                activity?.let { AppLocale.set(it, AppLocale.SPANISH) }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            stringResource(R.string.common_language_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = Ink2
+        )
+    }
+}
+
+@Composable
+private fun SettingsScreen(armed: Boolean, recording: Boolean, tick: Int) {    val context = LocalContext.current
     // CaptureLog is a plain singleton, not compose state: key the read on the poll tick so the
     // log actually refreshes instead of freezing at whatever it held on first composition.
     val logTail = remember(tick) {
@@ -2465,21 +2590,21 @@ private fun SettingsScreen(armed: Boolean, recording: Boolean, tick: Int) {
             .background(Canvas),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item { ScreenHeader("Settings", "Everything local. No account, no cloud.") }
+        item { ScreenHeader(stringResource(R.string.ui_tab_settings), stringResource(R.string.ui_settings_subtitle)) }
 
         item {
             Box(Modifier.padding(horizontal = 20.dp)) {
                 Surface(color = Surface1, shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(18.dp)) {
-                        SettingRow("Capture service", if (armed) "Armed" else "Disarmed", if (armed) Signal else Ink2)
+                        SettingRow(stringResource(R.string.ui_settings_capture_service), if (armed) stringResource(R.string.ui_settings_armed) else stringResource(R.string.ui_settings_disarmed), if (armed) Signal else Ink2)
                         Spacer(Modifier.height(14.dp))
-                        SettingRow("Recording", if (recording) "Live" else "Idle", if (recording) Signal else Ink2)
+                        SettingRow(stringResource(R.string.ui_settings_recording), if (recording) stringResource(R.string.ui_settings_live) else stringResource(R.string.ui_settings_idle), if (recording) Signal else Ink2)
                         Spacer(Modifier.height(14.dp))
-                        SettingRow("Transcription", "Parakeet TDT 0.6B v3", Ink2)
+                        SettingRow(stringResource(R.string.ui_settings_transcription), stringResource(R.string.ui_settings_transcription_value), Ink2)
                         Spacer(Modifier.height(14.dp))
-                        SettingRow("Transform", "LFM3-1.7B", Ink2)
+                        SettingRow(stringResource(R.string.ui_settings_transform), stringResource(R.string.ui_settings_transform_value), Ink2)
                         Spacer(Modifier.height(14.dp))
-                        SettingRow("Language", "English", Ink2)
+                        LanguageSetting()
                     }
                 }
             }
@@ -2489,13 +2614,12 @@ private fun SettingsScreen(armed: Boolean, recording: Boolean, tick: Int) {
             Box(Modifier.padding(horizontal = 20.dp)) {
                 Surface(color = Surface1, shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(18.dp)) {
-                        Text("SPEECH MODEL", style = MaterialTheme.typography.labelSmall, color = Ink2)
+                        Text(stringResource(R.string.ui_speech_model), style = MaterialTheme.typography.labelSmall, color = Ink2)
                         Spacer(Modifier.height(10.dp))
                         Text(ModelInstaller.status, style = MaterialTheme.typography.bodyMedium, color = Ink)
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            "Parakeet TDT 0.6B v3, 640 MB. Downloaded once over HTTPS and verified " +
-                                "against pinned checksums. After that the app runs fully offline.",
+                            stringResource(R.string.ui_settings_speech_model_body),
                             style = MaterialTheme.typography.bodySmall,
                             color = Ink2
                         )
@@ -2520,9 +2644,9 @@ private fun SettingsScreen(armed: Boolean, recording: Boolean, tick: Int) {
                         ) {
                             Text(
                                 when {
-                                    ModelInstaller.installed -> "Model ready"
-                                    ModelInstaller.busy -> "${(ModelInstaller.progress * 100).toInt()}%"
-                                    else -> "Download model (640 MB)"
+                                    ModelInstaller.installed -> stringResource(R.string.ui_settings_model_ready)
+                                    ModelInstaller.busy -> stringResource(R.string.ui_settings_model_progress, (ModelInstaller.progress * 100).toInt())
+                                    else -> stringResource(R.string.ui_settings_download_model)
                                 },
                                 style = MaterialTheme.typography.labelMedium,
                                 color = if (ModelInstaller.installed) Mint else Signal,
@@ -2538,10 +2662,10 @@ private fun SettingsScreen(armed: Boolean, recording: Boolean, tick: Int) {
             Box(Modifier.padding(horizontal = 20.dp)) {
                 Surface(color = Surface1, shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(18.dp)) {
-                        Text("EVENT LOG", style = MaterialTheme.typography.labelSmall, color = Ink2)
+                        Text(stringResource(R.string.ui_settings_event_log), style = MaterialTheme.typography.labelSmall, color = Ink2)
                         Spacer(Modifier.height(10.dp))
                         Text(
-                            if (logTail.isBlank()) "no events yet" else logTail,
+                            if (logTail.isBlank()) stringResource(R.string.ui_settings_no_events) else logTail,
                             style = MaterialTheme.typography.bodySmall,
                             color = Ink2
                         )
@@ -2595,7 +2719,12 @@ private fun NoteDetailScreen(
         reanalyzeFailed = false
         reanalyzing = true
         scope.launch(Dispatchers.IO) {
-            val fields = Transform.apply(context.filesDir, startedVerbatim, chosen)
+            val fields = Transform.apply(
+                context.filesDir,
+                startedVerbatim,
+                chosen,
+                AppLocale.modelLanguage(context)
+            )
             if (fields != null) {
                 val stored = NoteStore.byId(note.id)
                 if (stored != null &&
@@ -2640,7 +2769,7 @@ private fun NoteDetailScreen(
             ) {
                 Icon(
                     Icons.Filled.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(R.string.ui_action_back),
                     tint = Ink,
                     modifier = Modifier
                         .size(40.dp)
@@ -2648,19 +2777,19 @@ private fun NoteDetailScreen(
                         .padding(8.dp)
                 )
                 Spacer(Modifier.width(6.dp))
-                Text("NOTE", style = MaterialTheme.typography.labelSmall, color = Ink2)
+                Text(stringResource(R.string.ui_note_label), style = MaterialTheme.typography.labelSmall, color = Ink2)
                 Spacer(Modifier.weight(1f))
                 // Nothing to reprocess when there are no words: a note can only be re-shaped
                 // from what was said, not from fields a previous run produced.
                 PillButton(
-                    "Reanalyze",
+                    stringResource(R.string.ui_note_reanalyze),
                     Surface2,
                     Ink,
                     { reprocessing = true },
                     enabled = note.verbatim.isNotBlank() && !reanalyzing
                 )
                 Spacer(Modifier.width(8.dp))
-                PillButton("Edit", Surface2, Ink, onEdit)
+                PillButton(stringResource(R.string.ui_action_edit), Surface2, Ink, onEdit)
             }
         }
         if (reanalyzing || reanalyzeFailed) {
@@ -2674,15 +2803,14 @@ private fun NoteDetailScreen(
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            "Reprocessing on-device…",
+                            stringResource(R.string.ui_note_reprocessing),
                             style = MaterialTheme.typography.bodySmall,
                             color = Ink2
                         )
                     }
                     if (reanalyzeFailed) {
                         Text(
-                            "Could not reprocess this note. Try again from Settings if the " +
-                                "model is missing.",
+                            stringResource(R.string.ui_note_reprocess_failed),
                             style = MaterialTheme.typography.bodySmall,
                             color = Red
                         )
@@ -2699,7 +2827,7 @@ private fun NoteDetailScreen(
                         EditedBadge()
                         Spacer(Modifier.width(8.dp))
                     }
-                    Text(note.whenText, style = MaterialTheme.typography.labelSmall, color = Ink2)
+                    Text(whenLabel(note.whenText), style = MaterialTheme.typography.labelSmall, color = Ink2)
                 }
                 Spacer(Modifier.height(14.dp))
                 Text(note.title, style = MaterialTheme.typography.headlineMedium, color = Ink)
@@ -2713,7 +2841,7 @@ private fun NoteDetailScreen(
         }
         if (note.items.isNotEmpty()) {
             item {
-                DetailSection(if (noteFormat.ordered) "STEPS" else "ITEMS") {
+                DetailSection(if (noteFormat.ordered) stringResource(R.string.ui_section_steps) else stringResource(R.string.ui_section_items)) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         note.items.forEachIndexed { index, item ->
                             Row {
@@ -2753,37 +2881,37 @@ private fun NoteDetailScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "Space: ",
+                        stringResource(R.string.ui_note_space_label),
                         style = MaterialTheme.typography.bodyMedium,
                         color = Ink2
                     )
                     Text(
-                        spaceName ?: "No space",
+                        spaceName ?: stringResource(R.string.ui_space_none),
                         style = MaterialTheme.typography.bodyMedium,
                         color = if (spaceName == null) Ink2 else Signal,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
-                    Text("Change", style = MaterialTheme.typography.labelSmall, color = Ink2)
+                    Text(stringResource(R.string.ui_action_change), style = MaterialTheme.typography.labelSmall, color = Ink2)
                 }
             }
         }
         item {
-            DetailSection("WHAT I SAID") {
+            DetailSection(stringResource(R.string.ui_section_what_i_said)) {
                 Text(note.verbatim, style = MaterialTheme.typography.bodyMedium, color = Ink)
             }
         }
         if (note.why.isNotBlank()) {
             item {
-                DetailSection("WHY IT MATTERS") {
+                DetailSection(stringResource(R.string.ui_section_why_it_matters)) {
                     Text(note.why, style = MaterialTheme.typography.bodyMedium, color = Blue)
                 }
             }
         }
         if (note.question.isNotBlank()) {
             item {
-                DetailSection("OPEN QUESTION") {
+                DetailSection(stringResource(R.string.ui_section_open_question)) {
                     Text(note.question, style = MaterialTheme.typography.bodyMedium, color = Amber)
                 }
             }
@@ -2800,7 +2928,7 @@ private fun NoteDetailScreen(
                                 .border(1.dp, Line, CircleShape)
                                 .padding(horizontal = 12.dp, vertical = 5.dp)
                         ) {
-                            Text("#$tag", style = MaterialTheme.typography.bodySmall, color = Ink2)
+                            Text(stringResource(R.string.ui_note_tag, tag), style = MaterialTheme.typography.bodySmall, color = Ink2)
                         }
                     }
                 }
@@ -2811,7 +2939,7 @@ private fun NoteDetailScreen(
 
     if (picking) {
         SpacePickerDialog(
-            title = "File note in space",
+            title = stringResource(R.string.ui_space_picker_note_title),
             spaces = spaces,
             selectedId = note.spaceId,
             onSelect = { spaceId ->
@@ -2851,11 +2979,10 @@ private fun ReprocessDialog(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(Modifier.padding(20.dp)) {
-                Text("Reprocess this note", style = MaterialTheme.typography.titleMedium, color = Ink)
+                Text(stringResource(R.string.ui_reprocess_title), style = MaterialTheme.typography.titleMedium, color = Ink)
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    "This reruns the chosen format over your words and replaces the title, " +
-                        "summary, insight and tags. Your text is untouched.",
+                    stringResource(R.string.ui_reprocess_body),
                     style = MaterialTheme.typography.bodySmall,
                     color = Ink2
                 )
@@ -2863,15 +2990,15 @@ private fun ReprocessDialog(
                 FormatChips(chosen, { chosen = it })
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    chosen.blurb,
+                    formatBlurb(chosen),
                     style = MaterialTheme.typography.bodySmall,
                     color = Ink2
                 )
                 Spacer(Modifier.height(18.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    PillButton("Cancel", Surface2, Ink2, onDismiss)
+                    PillButton(stringResource(R.string.ui_action_cancel), Surface2, Ink2, onDismiss)
                     Spacer(Modifier.width(10.dp))
-                    PillButton("Reprocess", Signal, Color.White, { onReprocess(chosen) })
+                    PillButton(stringResource(R.string.ui_reprocess_confirm), Signal, Color.White, { onReprocess(chosen) })
                 }
             }
         }
@@ -2954,7 +3081,7 @@ private fun NoteEditorScreen(
         ) {
             Icon(
                 Icons.Filled.ArrowBack,
-                contentDescription = "Cancel",
+                contentDescription = stringResource(R.string.ui_action_cancel),
                 tint = Ink,
                 modifier = Modifier
                     .size(40.dp)
@@ -2962,12 +3089,12 @@ private fun NoteEditorScreen(
                     .padding(8.dp)
             )
             Spacer(Modifier.width(6.dp))
-            Text("EDIT NOTE", style = MaterialTheme.typography.labelSmall, color = Ink2)
+            Text(stringResource(R.string.ui_editor_title), style = MaterialTheme.typography.labelSmall, color = Ink2)
             Spacer(Modifier.weight(1f))
-            PillButton("Cancel", Surface2, Ink2, onCancel)
+            PillButton(stringResource(R.string.ui_action_cancel), Surface2, Ink2, onCancel)
             Spacer(Modifier.width(8.dp))
             PillButton(
-                "Save",
+                stringResource(R.string.ui_action_save),
                 Signal,
                 Color.White,
                 {
@@ -3007,77 +3134,76 @@ private fun NoteEditorScreen(
         ) {
             Column {
                 Text(
-                    "FORMAT · " + noteFormat.label,
+                    stringResource(R.string.ui_editor_format, formatLabel(noteFormat)),
                     style = MaterialTheme.typography.labelSmall,
                     color = Ink2
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Change the format by reprocessing this note.",
+                    stringResource(R.string.ui_editor_format_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = Ink2
                 )
             }
-            EditorField("TITLE", title, "What this note is about", { title = it }, singleLine = true)
+            EditorField(stringResource(R.string.ui_section_title), title, stringResource(R.string.ui_placeholder_title), { title = it }, singleLine = true)
             EditorField(
-                "ONE LINE",
+                stringResource(R.string.ui_section_one_line),
                 oneLine,
-                "The note in one sentence",
+                stringResource(R.string.ui_placeholder_one_line),
                 { oneLine = it },
                 minHeight = 46.dp
             )
             if (showsItems) {
                 EditorField(
-                    "ITEMS",
+                    stringResource(R.string.ui_section_items),
                     itemsText,
-                    "One item per line",
+                    stringResource(R.string.ui_placeholder_items),
                     { itemsText = it },
                     minHeight = 120.dp
                 )
             }
             EditorField(
-                "WHAT I SAID",
+                stringResource(R.string.ui_section_what_i_said),
                 verbatim,
-                "Your words, as captured",
+                stringResource(R.string.ui_placeholder_what_i_said),
                 { verbatim = it },
                 minHeight = 106.dp
             )
             EditorField(
-                "WHY IT MATTERS",
+                stringResource(R.string.ui_section_why_it_matters),
                 why,
-                "Optional: why this is worth keeping",
+                stringResource(R.string.ui_placeholder_why),
                 { why = it },
                 minHeight = 70.dp
             )
             EditorField(
-                "OPEN QUESTION",
+                stringResource(R.string.ui_section_open_question),
                 question,
-                "Optional: what is still unresolved",
+                stringResource(R.string.ui_placeholder_question),
                 { question = it },
                 minHeight = 70.dp
             )
             EditorField(
-                "TAGS",
+                stringResource(R.string.ui_section_tags),
                 tagsText,
-                "product, strategy",
+                stringResource(R.string.ui_placeholder_tags),
                 { tagsText = it },
                 singleLine = true
             )
             Column {
-                Text("MODE", style = MaterialTheme.typography.labelSmall, color = Ink2)
+                Text(stringResource(R.string.ui_section_mode), style = MaterialTheme.typography.labelSmall, color = Ink2)
                 Spacer(Modifier.height(8.dp))
                 Row(
                     Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     noteModes.forEach { candidate ->
-                        SubTab(candidate, candidate == mode) { mode = candidate }
+                        SubTab(modeLabel(candidate), candidate == mode) { mode = candidate }
                     }
                 }
             }
             Text(
-                "Saving rewrites this note's words and marks it edited. Its recording and its " +
-                    "space are left exactly as they are.",
+                stringResource(R.string.ui_editor_save_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = Ink2
             )
@@ -3141,13 +3267,13 @@ private fun EditorField(
 private val wordGap = Regex("\\s+")
 
 /** A title for a note nobody titled: the opening words of what was typed. */
-private fun derivedTitle(text: String): String {
+private fun derivedTitle(text: String, fallback: String): String {
     val words = text.trim()
         .split(wordGap)
         .filter { it.isNotEmpty() }
         .take(8)
         .joinToString(" ")
-    return words.trimEnd('.', ',', ';', ':').ifBlank { "Untitled note" }
+    return words.trimEnd('.', ',', ';', ':').ifBlank { fallback }
 }
 
 /**
@@ -3183,6 +3309,7 @@ private fun NewNoteScreen(
     val aiOn = useAi && aiAvailable
     val canSave = text.isNotBlank() && !saving
     val spaceName = spaces.firstOrNull { it.id == selectedSpaceId }?.name
+    val untitled = stringResource(R.string.common_untitled_note)
 
     fun save() {
         if (saving || text.isBlank()) return
@@ -3198,7 +3325,16 @@ private fun NewNoteScreen(
         // Both the model call and the notes.json write are blocking: one IO hop, then back to
         // main only to tell the caller the note is on disk.
         scope.launch(Dispatchers.IO) {
-            val fields = if (shape) Transform.apply(context.filesDir, typed, chosen) else null
+            val fields = if (shape) {
+                Transform.apply(
+                    context.filesDir,
+                    typed,
+                    chosen,
+                    AppLocale.modelLanguage(context)
+                )
+            } else {
+                null
+            }
             if (shape && fields == null) {
                 CaptureLog.add("notes: shaping failed, saved the typed text as written")
             }
@@ -3208,7 +3344,7 @@ private fun NewNoteScreen(
                     // A title the user typed is theirs; the model's is only a fallback for a
                     // blank one, and the words themselves are the last resort.
                     title = typedTitle.ifBlank {
-                        fields?.title?.takeIf { it.isNotBlank() } ?: derivedTitle(typed)
+                        fields?.title?.takeIf { it.isNotBlank() } ?: derivedTitle(typed, untitled)
                     },
                     oneLine = fields?.oneLine ?: "",
                     mode = fields?.mode ?: "Note",
@@ -3243,7 +3379,7 @@ private fun NewNoteScreen(
         ) {
             Icon(
                 Icons.Filled.ArrowBack,
-                contentDescription = "Cancel",
+                contentDescription = stringResource(R.string.ui_action_cancel),
                 tint = if (saving) Ink2 else Ink,
                 modifier = Modifier
                     .size(40.dp)
@@ -3251,12 +3387,12 @@ private fun NewNoteScreen(
                     .padding(8.dp)
             )
             Spacer(Modifier.width(6.dp))
-            Text("NEW NOTE", style = MaterialTheme.typography.labelSmall, color = Ink2)
+            Text(stringResource(R.string.ui_new_note_title), style = MaterialTheme.typography.labelSmall, color = Ink2)
             Spacer(Modifier.weight(1f))
-            PillButton("Cancel", Surface2, Ink2, onCancel, enabled = !saving)
+            PillButton(stringResource(R.string.ui_action_cancel), Surface2, Ink2, onCancel, enabled = !saving)
             Spacer(Modifier.width(8.dp))
             PillButton(
-                "Save",
+                stringResource(R.string.ui_action_save),
                 if (canSave) Signal else Surface2,
                 if (canSave) Color.White else Ink2,
                 { save() },
@@ -3273,7 +3409,7 @@ private fun NewNoteScreen(
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    if (savingWithAi) "Shaping the note…" else "Saving…",
+                    if (savingWithAi) stringResource(R.string.ui_new_note_shaping) else stringResource(R.string.ui_new_note_saving),
                     style = MaterialTheme.typography.bodySmall,
                     color = Ink2
                 )
@@ -3289,21 +3425,21 @@ private fun NewNoteScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             EditorField(
-                "TEXT",
+                stringResource(R.string.ui_section_text),
                 text,
-                "What you want to keep",
+                stringResource(R.string.ui_placeholder_new_note_text),
                 { text = it },
                 minHeight = 130.dp
             )
             EditorField(
-                "TITLE",
+                stringResource(R.string.ui_section_title),
                 titleInput,
-                "Optional: used exactly as written",
+                stringResource(R.string.ui_placeholder_new_note_title),
                 { titleInput = it },
                 singleLine = true
             )
             Column {
-                Text("SPACE", style = MaterialTheme.typography.labelSmall, color = Ink2)
+                Text(stringResource(R.string.ui_section_space), style = MaterialTheme.typography.labelSmall, color = Ink2)
                 Spacer(Modifier.height(8.dp))
                 Surface(
                     color = Surface1,
@@ -3322,24 +3458,24 @@ private fun NewNoteScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            spaceName ?: "No space",
+                            spaceName ?: stringResource(R.string.ui_space_none),
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (spaceName == null) Ink2 else Signal,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
                         )
-                        Text("Change", style = MaterialTheme.typography.labelSmall, color = Ink2)
+                        Text(stringResource(R.string.ui_action_change), style = MaterialTheme.typography.labelSmall, color = Ink2)
                     }
                 }
             }
             Column {
-                Text("FORMAT", style = MaterialTheme.typography.labelSmall, color = Ink2)
+                Text(stringResource(R.string.ui_section_format), style = MaterialTheme.typography.labelSmall, color = Ink2)
                 Spacer(Modifier.height(8.dp))
                 FormatChips(format, { format = it })
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    format.blurb,
+                    formatBlurb(format),
                     style = MaterialTheme.typography.bodySmall,
                     color = Ink2
                 )
@@ -3347,19 +3483,19 @@ private fun NewNoteScreen(
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "Shape with AI",
+                        stringResource(R.string.ui_new_note_shape_with_ai),
                         style = MaterialTheme.typography.bodyMedium,
                         color = Ink,
                         modifier = Modifier.weight(1f)
                     )
-                    SubTab("On", aiOn) { if (aiAvailable) useAi = true }
+                    SubTab(stringResource(R.string.ui_action_on), aiOn) { if (aiAvailable) useAi = true }
                     Spacer(Modifier.width(8.dp))
-                    SubTab("Off", !aiOn) { useAi = false }
+                    SubTab(stringResource(R.string.ui_action_off), !aiOn) { useAi = false }
                 }
                 if (!format.usesLlm) {
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Plain keeps your words exactly as typed.",
+                        stringResource(R.string.ui_new_note_plain_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = Ink2
                     )
@@ -3367,8 +3503,7 @@ private fun NewNoteScreen(
                 if (!TransformModel.installed && format.usesLlm) {
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "The transform model isn't installed, so this note is saved as plain " +
-                            "text. Add it in Settings to shape notes.",
+                        stringResource(R.string.ui_new_note_no_model),
                         style = MaterialTheme.typography.bodySmall,
                         color = Ink2
                     )
@@ -3379,7 +3514,7 @@ private fun NewNoteScreen(
 
     if (pickingSpace) {
         SpacePickerDialog(
-            title = "File into space",
+            title = stringResource(R.string.ui_space_picker_new_note_title),
             spaces = spaces,
             selectedId = selectedSpaceId,
             onSelect = { spaceId ->
@@ -3421,23 +3556,23 @@ private fun SpaceEditorDialog(
                     .padding(20.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                Text("Edit space", style = MaterialTheme.typography.titleMedium, color = Ink)
+                Text(stringResource(R.string.ui_space_edit_title), style = MaterialTheme.typography.titleMedium, color = Ink)
                 Spacer(Modifier.height(14.dp))
-                EditorField("NAME", editName, "Name this space", { editName = it }, singleLine = true)
+                EditorField(stringResource(R.string.ui_section_name), editName, stringResource(R.string.ui_space_name_placeholder), { editName = it }, singleLine = true)
                 Spacer(Modifier.height(14.dp))
                 EditorField(
-                    "DESCRIPTION",
+                    stringResource(R.string.ui_section_description),
                     editDescription,
-                    "What this space is for, in your words",
+                    stringResource(R.string.ui_placeholder_space_description),
                     { editDescription = it },
                     minHeight = 70.dp
                 )
                 Spacer(Modifier.height(18.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    PillButton("Cancel", Surface2, Ink2, onDismiss)
+                    PillButton(stringResource(R.string.ui_action_cancel), Surface2, Ink2, onDismiss)
                     Spacer(Modifier.width(10.dp))
                     PillButton(
-                        "Save",
+                        stringResource(R.string.ui_action_save),
                         if (clean.isEmpty()) Surface2 else Signal,
                         if (clean.isEmpty()) Ink2 else Color.White,
                         { if (clean.isNotEmpty()) onSave(clean, editDescription) },
@@ -3474,11 +3609,10 @@ private fun LensPickerDialog(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(Modifier.padding(20.dp)) {
-                Text("Add a lens", style = MaterialTheme.typography.titleMedium, color = Ink)
+                Text(stringResource(R.string.ui_lens_add), style = MaterialTheme.typography.titleMedium, color = Ink)
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "A lens is one way of reading this space's notes. Enabling one gives it its " +
-                        "own report; lenses never overwrite each other.",
+                    stringResource(R.string.ui_lens_picker_body),
                     style = MaterialTheme.typography.bodySmall,
                     color = Ink2
                 )
@@ -3498,17 +3632,17 @@ private fun LensPickerDialog(
                     }
                     if (availableBuiltIns.isEmpty() && availableCustom.isEmpty()) {
                         Text(
-                            "Every lens is already on this space.",
+                            stringResource(R.string.ui_lens_picker_empty),
                             style = MaterialTheme.typography.bodySmall,
                             color = Ink2
                         )
                         Spacer(Modifier.height(8.dp))
                     }
-                    PickerRow("New custom lens…", false, onNewCustom)
+                    PickerRow(stringResource(R.string.ui_lens_picker_new_custom), false, onNewCustom)
                 }
                 Spacer(Modifier.height(16.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    PillButton("Cancel", Surface2, Ink2, onDismiss)
+                    PillButton(stringResource(R.string.ui_action_cancel), Surface2, Ink2, onDismiss)
                 }
             }
         }
@@ -3527,11 +3661,11 @@ private fun LensPickRow(spec: LensSpec, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
-            Text(spec.name, style = MaterialTheme.typography.bodyMedium, color = Ink)
-            if (spec.description.isNotBlank()) {
+            Text(lensName(spec), style = MaterialTheme.typography.bodyMedium, color = Ink)
+            if (lensDescription(spec).isNotBlank()) {
                 Spacer(Modifier.height(3.dp))
                 Text(
-                    spec.description,
+                    lensDescription(spec),
                     style = MaterialTheme.typography.bodySmall,
                     color = Ink2,
                     maxLines = 2,
@@ -3541,7 +3675,7 @@ private fun LensPickRow(spec: LensSpec, onClick: () -> Unit) {
         }
         if (!spec.builtIn) {
             Spacer(Modifier.width(10.dp))
-            Text("CUSTOM", style = MaterialTheme.typography.labelSmall, color = Blue)
+            Text(stringResource(R.string.ui_lens_custom_badge), style = MaterialTheme.typography.labelSmall, color = Blue)
         }
     }
 }
@@ -3578,46 +3712,45 @@ private fun CustomLensDialog(
                     .padding(20.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                Text("New custom lens", style = MaterialTheme.typography.titleMedium, color = Ink)
+                Text(stringResource(R.string.ui_lens_custom_title), style = MaterialTheme.typography.titleMedium, color = Ink)
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "The instruction is the body of the prompt: say what to produce. " +
-                        "Headings are enforced on top of it.",
+                    stringResource(R.string.ui_lens_custom_body),
                     style = MaterialTheme.typography.bodySmall,
                     color = Ink2
                 )
                 Spacer(Modifier.height(14.dp))
-                EditorField("NAME", name, "e.g. Risks", { name = it }, singleLine = true)
+                EditorField(stringResource(R.string.ui_section_name), name, stringResource(R.string.ui_placeholder_lens_name), { name = it }, singleLine = true)
                 Spacer(Modifier.height(12.dp))
                 EditorField(
-                    "DESCRIPTION",
+                    stringResource(R.string.ui_section_description),
                     description,
-                    "One line: what this lens is for",
+                    stringResource(R.string.ui_placeholder_lens_description),
                     { description = it },
                     singleLine = true
                 )
                 Spacer(Modifier.height(12.dp))
                 EditorField(
-                    "INSTRUCTION",
+                    stringResource(R.string.ui_section_instruction),
                     instruction,
-                    "What the report must do",
+                    stringResource(R.string.ui_placeholder_lens_instruction),
                     { instruction = it },
                     minHeight = 106.dp
                 )
                 Spacer(Modifier.height(12.dp))
                 EditorField(
-                    "SECTIONS",
+                    stringResource(R.string.ui_section_sections),
                     sectionsText,
-                    "What could go wrong, Early signals, Mitigations",
+                    stringResource(R.string.ui_placeholder_lens_sections),
                     { sectionsText = it },
                     singleLine = true
                 )
                 Spacer(Modifier.height(18.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    PillButton("Cancel", Surface2, Ink2, onDismiss)
+                    PillButton(stringResource(R.string.ui_action_cancel), Surface2, Ink2, onDismiss)
                     Spacer(Modifier.width(10.dp))
                     PillButton(
-                        "Create lens",
+                        stringResource(R.string.ui_lens_create),
                         if (ready) Signal else Surface2,
                         if (ready) Color.White else Ink2,
                         {
@@ -3661,34 +3794,32 @@ private fun RemoveLensDialog(
         ) {
             Column(Modifier.padding(20.dp)) {
                 Text(
-                    "Remove \"${spec.name}\" from this space?",
+                    stringResource(R.string.ui_lens_remove_title, lensName(spec)),
                     style = MaterialTheme.typography.titleMedium,
                     color = Ink
                 )
                 Spacer(Modifier.height(10.dp))
                 Text(
                     if (onDelete == null) {
-                        "This only takes the lens off this space. Its reports stay on disk and " +
-                            "you can add it back at any time."
+                        stringResource(R.string.ui_lens_remove_body_builtin)
                     } else {
-                        "Removing takes it off this space and keeps every report it made. " +
-                            "Deleting removes the lens itself, so no space can use it again."
+                        stringResource(R.string.ui_lens_remove_body_custom)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = Ink2
                 )
                 Spacer(Modifier.height(18.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    PillButton("Cancel", Surface2, Ink2, onDismiss)
+                    PillButton(stringResource(R.string.ui_action_cancel), Surface2, Ink2, onDismiss)
                     Spacer(Modifier.width(10.dp))
-                    PillButton("Remove", Surface2, Ink, onRemoveFromSpace)
+                    PillButton(stringResource(R.string.ui_action_remove), Surface2, Ink, onRemoveFromSpace)
                 }
                 if (onDelete != null) {
                     // On its own row: three pills abreast would not fit a narrow screen, and the
                     // destructive choice should not sit next to the ordinary one by accident.
                     Spacer(Modifier.height(10.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        PillButton("Delete lens", Red, Color.White, onDelete)
+                        PillButton(stringResource(R.string.ui_lens_delete), Red, Color.White, onDelete)
                     }
                 }
             }

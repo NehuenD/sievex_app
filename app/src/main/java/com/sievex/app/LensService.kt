@@ -58,6 +58,11 @@ class LensService : Service() {
     @Volatile
     private var destroyed = false
 
+    /** Notification text follows the language chosen in Settings, like the rest of the app. */
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocale.wrap(newBase))
+    }
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -166,7 +171,13 @@ class LensService : Service() {
 
             val notes = NoteStore.inSpace(space.id)
             CaptureLog.add("lens: building $lensId on $spaceId, ${notes.size} note(s)")
-            val artifact = Lens.generate(filesDir, space, notes, spec)
+            val artifact = Lens.generate(
+                filesDir,
+                space,
+                notes,
+                spec,
+                AppLocale.modelLanguage(this)
+            )
             names = space.name to spec.name
             if (artifact != null) {
                 outcome = RunState.DONE
@@ -205,8 +216,8 @@ class LensService : Service() {
 
     private fun processingNotification(): Notification =
         NotificationCompat.Builder(this, CHANNEL_PROCESSING)
-            .setContentTitle("Building your report")
-            .setContentText("You can leave the app — we'll notify you when it's ready.")
+            .setContentTitle(getString(R.string.sys_lens_building_title))
+            .setContentText(getString(R.string.sys_lens_building_text))
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setOngoing(true)
             .setSilent(true)
@@ -229,11 +240,15 @@ class LensService : Service() {
         lensName: String,
         ok: Boolean
     ) {
-        val title = if (ok) "Report ready" else "Report failed"
-        val text = if (ok) {
-            "$lensName is ready for $spaceName"
+        val title = if (ok) {
+            getString(R.string.sys_lens_report_ready_title)
         } else {
-            "Couldn't build $lensName for $spaceName. Tap to open the space and try again."
+            getString(R.string.sys_lens_report_failed_title)
+        }
+        val text = if (ok) {
+            getString(R.string.sys_lens_report_ready_text, lensName, spaceName)
+        } else {
+            getString(R.string.sys_lens_report_failed_text, lensName, spaceName)
         }
 
         // MainActivity may already be running behind the notification, so the tap must land on
@@ -289,10 +304,10 @@ class LensService : Service() {
         nm.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_PROCESSING,
-                "Report in progress",
+                getString(R.string.sys_lens_channel_processing_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Shown while a lens report is being built"
+                description = getString(R.string.sys_lens_channel_processing_description)
                 setSound(null, null)
                 enableVibration(false)
                 setShowBadge(false)
@@ -301,10 +316,10 @@ class LensService : Service() {
         nm.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_REPORTS,
-                "Reports",
+                getString(R.string.sys_lens_channel_reports_name),
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Tells you when a lens report is ready"
+                description = getString(R.string.sys_lens_channel_reports_description)
                 setSound(null, null)
                 enableVibration(false)
             }

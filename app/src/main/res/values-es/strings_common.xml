@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Spanish counterpart of strings_common.xml. Keys must match the English file exactly. -->
+<resources>
+
+    <string name="common_language">Idioma</string>
+    <string name="common_language_english">Inglés</string>
+    <string name="common_language_spanish">Español</string>
+    <string name="common_language_hint">La app y las notas que escribe cambian juntas.</string>
+
+    <string name="common_today">Hoy</string>
+    <string name="common_untitled_note">Nota sin título</string>
+
+    <string name="mode_insight">Hallazgo</string>
+    <string name="mode_idea">Idea</string>
+    <string name="mode_action">Acción</string>
+    <string name="mode_reference">Referencia</string>
+    <string name="mode_question">Pregunta</string>
+    <string name="mode_reflection">Reflexión</string>
+    <string name="mode_note">Nota</string>
+
+    <string name="format_note">Nota</string>
+    <string name="format_note_blurb">Resumen, hallazgo, pregunta y etiquetas</string>
+    <string name="format_list">Lista</string>
+    <string name="format_list_blurb">Elementos cortos, uno por viñeta</string>
+    <string name="format_steps">Pasos</string>
+    <string name="format_steps_blurb">Pasos ordenados, uno por línea</string>
+    <string name="format_plain">Texto</string>
+    <string name="format_plain_blurb">Lo que dijiste, sin añadir nada</string>
+
+    <string name="step_intent">Entendiendo la intención</string>
+    <string name="step_dictation">Entendiendo el dictado</string>
+    <string name="step_title">Creando el título</string>
+    <string name="step_summary">Escribiendo el resumen</string>
+    <string name="step_items">Extrayendo los elementos</string>
+    <string name="step_steps">Ordenando los pasos</string>
+    <string name="step_insights">Creando el hallazgo</string>
+    <string name="step_tags">Añadiendo etiquetas</string>
+    <string name="step_saving">Guardando la nota</string>
+
+    <string name="lens_insight_name">Hallazgo</string>
+    <string name="lens_insight_description">En qué se convierte el espacio: dónde está, qué se repite, las tensiones y qué probar después.</string>
+    <string name="lens_brainstorm_name">Lluvia de ideas</string>
+    <string name="lens_brainstorm_description">Ángulos que las notas no han tomado, combinaciones que vale la pena probar, ideas locas y un primer experimento.</string>
+    <string name="lens_reading_name">Lecturas</string>
+    <string name="lens_reading_description">Qué leer o escuchar después, por qué cada uno y qué huecos llenaría.</string>
+    <string name="lens_actions_name">Acciones</string>
+    <string name="lens_actions_description">Qué hacer ahora, qué lo bloquea y quién se encarga y para cuándo.</string>
+    <string name="lens_tensions_name">Tensiones</string>
+    <string name="lens_tensions_description">Contradicciones directas, cómo cambiaron las posturas y qué queda sin resolver.</string>
+    <string name="lens_timeline_name">Cronología</string>
+    <string name="lens_timeline_description">Cómo evolucionó el pensamiento, sus puntos de giro y dónde está ahora.</string>
+
+</resources>

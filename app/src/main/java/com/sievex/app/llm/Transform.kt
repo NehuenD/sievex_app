@@ -112,10 +112,13 @@ ws ::= [ \t\n\r]*
         filesDir: File,
         transcript: String,
         format: NoteFormat = NoteFormat.NOTE,
+        language: String = "en",
         reportPhase: (Int) -> Unit = {}
     ): Fields? {
         if (!format.usesLlm) return plainFields(transcript)
-        return runCatching { LlmGate.exclusive { applyUnsafe(filesDir, transcript, format, reportPhase) } }
+        return runCatching {
+            LlmGate.exclusive { applyUnsafe(filesDir, transcript, format, language, reportPhase) }
+        }
             .onFailure { CaptureLog.add("llm: failed - ${it.message}") }
             .getOrNull()
     }
@@ -139,6 +142,7 @@ ws ::= [ \t\n\r]*
         filesDir: File,
         transcript: String,
         format: NoteFormat,
+        language: String,
         reportPhase: (Int) -> Unit
     ): Fields? {
         val model = TransformModel.modelFile(filesDir)
@@ -148,11 +152,12 @@ ws ::= [ \t\n\r]*
             return null
         }
 
-        val system = when (format) {
+        val base = when (format) {
             NoteFormat.LIST -> LIST_SYSTEM
             NoteFormat.STEPS -> STEPS_SYSTEM
             else -> NOTE_SYSTEM
         }
+        val system = base + languageClause(language)
         val grammar = if (format == NoteFormat.NOTE) NOTE_GRAMMAR else ITEMS_GRAMMAR
 
         // A retry restarts the native phase counter at 1; the card must not run backwards.
@@ -207,6 +212,21 @@ ws ::= [ \t\n\r]*
             "Keep the title short and every item a short phrase."
         }
         return "$transcript\n\nReply with JSON only. $instruction"
+    }
+
+    /**
+     * The one line that decides the output language. The instructions stay English — a 1.7B model
+     * follows them fine and they are already tuned — while the fields it writes are Spanish.
+     * `verbatim` is untouched either way: it is the transcript, not a translation.
+     */
+    private fun languageClause(language: String): String = if (language == "es") {
+        """
+
+Write title, one_line, why_it_matters and open_question in Spanish, and tags as Spanish
+single words. Keep every JSON key and the mode value exactly as specified. Do not translate or
+repeat the transcript."""
+    } else {
+        ""
     }
 
     /**

@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Screen copy for AppUi.kt: the shell, capture, notes, spaces, lenses and settings.
+  Kept in its own file so a translation pass can take one screen file at a time.
+  Escapes below are Android resource escapes, not XML entities: \' for an apostrophe,
+  \" for a quote and %% for a literal percent sign.
+-->
+<resources>
+
+    <!-- Shell: navigation tabs and shared actions -->
+    <string name="ui_tab_record">Record</string>
+    <string name="ui_tab_spaces">Spaces</string>
+    <string name="ui_tab_notes">Notes</string>
+    <string name="ui_tab_actions">Actions</string>
+    <string name="ui_tab_settings">Settings</string>
+    <string name="ui_brand_name">SievexAI</string>
+    <string name="ui_action_back">Back</string>
+    <string name="ui_action_edit">Edit</string>
+    <string name="ui_action_cancel">Cancel</string>
+    <string name="ui_action_save">Save</string>
+    <string name="ui_action_change">Change</string>
+    <string name="ui_action_remove">Remove</string>
+    <string name="ui_action_on">On</string>
+    <string name="ui_action_off">Off</string>
+    <string name="ui_action_stop">Stop</string>
+
+    <!-- Spaces: name, pick, delete, edit -->
+    <string name="ui_space_new">New space</string>
+    <string name="ui_space_create">Create space</string>
+    <string name="ui_space_delete_title">Delete \"%1$s\"?</string>
+    <string name="ui_space_delete_body">Its reports are deleted with it. The notes inside are kept and move to No space.</string>
+    <string name="ui_space_delete_confirm">Delete space</string>
+    <string name="ui_space_open_action">Open space</string>
+    <string name="ui_space_none">No space</string>
+    <string name="ui_space_name_placeholder">Name this space</string>
+    <string name="ui_space_chip_active">Space: %1$s</string>
+    <string name="ui_space_chip_none">Space: none</string>
+    <string name="ui_space_picker_record_title">Record into space</string>
+    <string name="ui_space_picker_note_title">File note in space</string>
+    <string name="ui_space_picker_new_note_title">File into space</string>
+    <string name="ui_space_picker_empty">No spaces yet. Make one in the Spaces tab.</string>
+    <string name="ui_spaces_subtitle">One container for related notes.</string>
+    <string name="ui_spaces_hold_to_delete">Hold a space to delete it.</string>
+    <string name="ui_spaces_empty">No spaces yet. A space groups related notes; its insight is a transform over all of them.</string>
+    <string name="ui_space_no_report">no report yet</string>
+    <string name="ui_space_report_age">report %1$s</string>
+    <string name="ui_space_insights_subtab">Insights</string>
+    <string name="ui_space_empty_notes">No notes in this space yet. Open a note from Notes and set its Space row.</string>
+    <string name="ui_space_hold_chip_hint">Hold a chip to remove that lens from this space.</string>
+    <string name="ui_space_edit_title">Edit space</string>
+    <string name="ui_placeholder_space_description">What this space is for, in your words</string>
+
+    <!-- Capture card and record screen -->
+    <string name="ui_capture_status_recording">RECORDING</string>
+    <string name="ui_capture_status_armed">ARMED</string>
+    <string name="ui_capture_status_ready">READY</string>
+    <string name="ui_capture_body_recording">Capturing your burst.</string>
+    <string name="ui_capture_body_armed">Listening. Tap pause on your podcast, or record now.</string>
+    <string name="ui_capture_body_ready">Arm to start listening for a podcast pause.</string>
+    <string name="ui_capture_enable_notification_access">Enable notification access</string>
+    <string name="ui_capture_record_now">Record now</string>
+    <string name="ui_capture_disarm">Disarm</string>
+    <string name="ui_capture_arm">Arm capture</string>
+    <string name="ui_record_subtitle_ready">Tap to capture, tap again to stop</string>
+    <string name="ui_record_subtitle_setup">Finish setup first</string>
+    <string name="ui_record_setup_body">The speech model is always needed. Shaping a Note, List or Steps also needs the transform model; Plain does not.</string>
+    <string name="ui_record_stage_transcribing">TRANSCRIBING AUDIO</string>
+    <string name="ui_record_stage_failed">NOTHING FILED</string>
+    <string name="ui_record_tap_to_record">Tap to record</string>
+    <string name="ui_record_recording">Recording</string>
+    <string name="ui_record_hint">Press the circle, speak, press again</string>
+    <string name="ui_record_podcast_trigger_on">Podcast trigger: on</string>
+    <string name="ui_record_podcast_trigger_off">Podcast trigger: off</string>
+    <string name="ui_record_note_ready">NOTE READY</string>
+    <string name="ui_record_view_in_notes">View in Notes</string>
+
+    <!-- Notes list -->
+    <string name="ui_notes_new_note">New note</string>
+    <string name="ui_notes_recent">RECENT</string>
+    <string name="ui_notes_empty">Nothing captured yet. Arm capture, import the model in Settings, then tap pause on your podcast.</string>
+    <string name="ui_notes_count_one">1 note</string>
+    <string name="ui_notes_count_many">%1$d notes</string>
+    <string name="ui_note_edited">edited</string>
+
+    <!-- Model setup cards -->
+    <string name="ui_speech_model">SPEECH MODEL</string>
+    <string name="ui_speech_model_blurb">One-time download, 640 MB. Everything runs on-device afterwards.</string>
+    <string name="ui_speech_model_download">Download speech model</string>
+    <string name="ui_transform_model">TRANSFORM MODEL</string>
+    <string name="ui_transform_model_blurb">LFM3-1.7B, 1.1 GB. Gives every note its mode, title, why it matters and an open question.</string>
+    <string name="ui_transform_model_download">Download transform model</string>
+
+    <!-- Note detail -->
+    <string name="ui_note_label">NOTE</string>
+    <string name="ui_note_reanalyze">Reanalyze</string>
+    <string name="ui_note_reprocessing">Reprocessing on-device…</string>
+    <string name="ui_note_reprocess_failed">Could not reprocess this note. Try again from Settings if the model is missing.</string>
+    <!-- \u0020 keeps the trailing space this label had when it was a Kotlin literal. -->
+    <string name="ui_note_space_label">Space:\u0020</string>
+    <string name="ui_note_tag">#%1$s</string>
+    <string name="ui_reprocess_title">Reprocess this note</string>
+    <string name="ui_reprocess_body">This reruns the chosen format over your words and replaces the title, summary, insight and tags. Your text is untouched.</string>
+    <string name="ui_reprocess_confirm">Reprocess</string>
+
+    <!-- Section labels shared by the note detail and the editor -->
+    <string name="ui_section_what_i_said">WHAT I SAID</string>
+    <string name="ui_section_why_it_matters">WHY IT MATTERS</string>
+    <string name="ui_section_open_question">OPEN QUESTION</string>
+    <string name="ui_section_items">ITEMS</string>
+    <string name="ui_section_steps">STEPS</string>
+    <string name="ui_section_space">SPACE</string>
+    <string name="ui_section_format">FORMAT</string>
+    <string name="ui_section_title">TITLE</string>
+    <string name="ui_section_one_line">ONE LINE</string>
+    <string name="ui_section_mode">MODE</string>
+    <string name="ui_section_tags">TAGS</string>
+    <string name="ui_section_name">NAME</string>
+    <string name="ui_section_description">DESCRIPTION</string>
+    <string name="ui_section_instruction">INSTRUCTION</string>
+    <string name="ui_section_sections">SECTIONS</string>
+    <string name="ui_section_text">TEXT</string>
+
+    <!-- Note editor -->
+    <string name="ui_editor_title">EDIT NOTE</string>
+    <string name="ui_editor_format">FORMAT · %1$s</string>
+    <string name="ui_editor_format_hint">Change the format by reprocessing this note.</string>
+    <string name="ui_editor_save_hint">Saving rewrites this note\'s words and marks it edited. Its recording and its space are left exactly as they are.</string>
+    <string name="ui_placeholder_title">What this note is about</string>
+    <string name="ui_placeholder_one_line">The note in one sentence</string>
+    <string name="ui_placeholder_items">One item per line</string>
+    <string name="ui_placeholder_what_i_said">Your words, as captured</string>
+    <string name="ui_placeholder_why">Optional: why this is worth keeping</string>
+    <string name="ui_placeholder_question">Optional: what is still unresolved</string>
+    <string name="ui_placeholder_tags">product, strategy</string>
+
+    <!-- New hand-written note -->
+    <string name="ui_new_note_title">NEW NOTE</string>
+    <string name="ui_new_note_shaping">Shaping the note…</string>
+    <string name="ui_new_note_saving">Saving…</string>
+    <string name="ui_new_note_shape_with_ai">Shape with AI</string>
+    <string name="ui_new_note_plain_hint">Plain keeps your words exactly as typed.</string>
+    <string name="ui_new_note_no_model">The transform model isn\'t installed, so this note is saved as plain text. Add it in Settings to shape notes.</string>
+    <string name="ui_placeholder_new_note_text">What you want to keep</string>
+    <string name="ui_placeholder_new_note_title">Optional: used exactly as written</string>
+
+    <!-- Settings -->
+    <string name="ui_settings_subtitle">Everything local. No account, no cloud.</string>
+    <string name="ui_settings_capture_service">Capture service</string>
+    <string name="ui_settings_armed">Armed</string>
+    <string name="ui_settings_disarmed">Disarmed</string>
+    <string name="ui_settings_recording">Recording</string>
+    <string name="ui_settings_live">Live</string>
+    <string name="ui_settings_idle">Idle</string>
+    <string name="ui_settings_transcription">Transcription</string>
+    <string name="ui_settings_transcription_value">Parakeet TDT 0.6B v3</string>
+    <string name="ui_settings_transform">Transform</string>
+    <string name="ui_settings_transform_value">LFM3-1.7B</string>
+    <string name="ui_settings_speech_model_body">Parakeet TDT 0.6B v3, 640 MB. Downloaded once over HTTPS and verified against pinned checksums. After that the app runs fully offline.</string>
+    <string name="ui_settings_model_ready">Model ready</string>
+    <string name="ui_settings_model_progress">%1$d%%</string>
+    <string name="ui_settings_download_model">Download model (640 MB)</string>
+    <string name="ui_settings_event_log">EVENT LOG</string>
+    <string name="ui_settings_no_events">no events yet</string>
+
+    <!-- Lenses -->
+    <string name="ui_lens_add">Add a lens</string>
+    <string name="ui_lens_add_chip">+ Add lens</string>
+    <string name="ui_lens_generate">Generate</string>
+    <string name="ui_lens_regenerate">Regenerate</string>
+    <string name="ui_lens_working">Working in the background. You can leave this screen — we\'ll notify you when the report is ready.</string>
+    <string name="ui_lens_failed">No report produced. Check the transform model in Settings, then try again.</string>
+    <string name="ui_lens_needs_notes">A space needs at least one note before a lens can say anything.</string>
+    <string name="ui_lens_stale_hint">Notes changed since this was generated. Regenerate to bring it current.</string>
+    <string name="ui_lens_none_title">NO LENSES ON THIS SPACE</string>
+    <string name="ui_lens_none_body">A lens is one way of reading every note in this space: it picks the headings, cites the notes it used, and can be regenerated any time.</string>
+    <string name="ui_lens_empty_title">NO %1$s YET</string>
+    <string name="ui_lens_empty_body">It reads every note in this space and cites the ones it used. Nothing is written until you generate it.</string>
+    <string name="ui_lens_from_notes">from %1$d notes · %2$s</string>
+    <string name="ui_lens_show_action">Show %1$s</string>
+    <string name="ui_lens_remove_action">Remove %1$s from this space</string>
+    <string name="ui_lens_remove_title">Remove \"%1$s\" from this space?</string>
+    <string name="ui_lens_remove_body_builtin">This only takes the lens off this space. Its reports stay on disk and you can add it back at any time.</string>
+    <string name="ui_lens_remove_body_custom">Removing takes it off this space and keeps every report it made. Deleting removes the lens itself, so no space can use it again.</string>
+    <string name="ui_lens_delete">Delete lens</string>
+    <string name="ui_lens_picker_body">A lens is one way of reading this space\'s notes. Enabling one gives it its own report; lenses never overwrite each other.</string>
+    <string name="ui_lens_picker_empty">Every lens is already on this space.</string>
+    <string name="ui_lens_picker_new_custom">New custom lens…</string>
+    <string name="ui_lens_custom_badge">CUSTOM</string>
+    <string name="ui_lens_custom_title">New custom lens</string>
+    <string name="ui_lens_custom_body">The instruction is the body of the prompt: say what to produce. Headings are enforced on top of it.</string>
+    <string name="ui_lens_create">Create lens</string>
+    <string name="ui_placeholder_lens_name">e.g. Risks</string>
+    <string name="ui_placeholder_lens_description">One line: what this lens is for</string>
+    <string name="ui_placeholder_lens_instruction">What the report must do</string>
+    <string name="ui_placeholder_lens_sections">What could go wrong, Early signals, Mitigations</string>
+
+    <!-- Actions screen -->
+    <string name="ui_actions_pending">%1$d pending</string>
+    <string name="ui_actions_empty">Nothing pending. Action-mode captures land here.</string>
+
+    <!-- Relative ages, shown on space rows and lens reports -->
+    <string name="ui_age_never">never</string>
+    <string name="ui_age_just_now">just now</string>
+    <string name="ui_age_minutes">%1$dm ago</string>
+    <string name="ui_age_hours">%1$dh ago</string>
+    <string name="ui_age_days">%1$dd ago</string>
+    <string name="ui_age_weeks">%1$dw ago</string>
+
+    <!-- Status chips -->
+    <string name="ui_stale">STALE</string>
+
+</resources>

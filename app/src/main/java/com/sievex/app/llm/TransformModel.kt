@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.sievex.app.CaptureLog
 import com.sievex.app.CaptureService
+import com.sievex.app.R
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
@@ -31,6 +32,12 @@ object TransformModel {
         private set
     var progress by mutableStateOf(0f)
         private set
+
+    /**
+     * Shown by the UI. The initial value is an English fallback because an object has no Context
+     * at class-init; AppUi calls refresh(context) before the card is shown, and every later write
+     * is resolved from resources.
+     */
     var status by mutableStateOf("Transform model not installed")
         private set
     var failed by mutableStateOf(false)
@@ -42,10 +49,10 @@ object TransformModel {
         val f = modelFile(context.filesDir)
         installed = f.length() == BYTES
         if (installed) {
-            status = "LFM3-1.7B ready (${BYTES / (1024 * 1024)} MB)"
+            status = context.getString(R.string.sys_llm_status_ready, BYTES / (1024 * 1024))
             progress = 1f
         } else if (!busy && !failed) {
-            status = "Transform model not installed"
+            status = context.getString(R.string.sys_llm_status_not_installed)
         }
     }
 
@@ -54,7 +61,7 @@ object TransformModel {
         busy = true
         failed = false
         progress = 0f
-        status = "Starting download"
+        status = context.getString(R.string.sys_model_starting_download)
 
         val app = context.applicationContext
         Thread {
@@ -68,7 +75,7 @@ object TransformModel {
                 if (part.length() != BYTES) {
                     throw IOException("size ${part.length()} != $BYTES")
                 }
-                status = "Verifying"
+                status = app.getString(R.string.sys_model_verifying)
                 if (sha256(part) != SHA256) {
                     part.delete()
                     throw IOException("checksum mismatch")
@@ -82,13 +89,13 @@ object TransformModel {
 
                 installed = true
                 progress = 1f
-                status = "LFM3-1.7B ready (${BYTES / (1024 * 1024)} MB)"
+                status = app.getString(R.string.sys_llm_status_ready, BYTES / (1024 * 1024))
                 CaptureLog.add("llm: model installed")
                 // A burst held by the pipeline can finish now; the queue drains on its own.
                 CaptureService.kick(app)
             } catch (t: Throwable) {
                 failed = true
-                status = "Download failed: ${t.message}"
+                status = app.getString(R.string.sys_model_download_failed, t.message)
                 CaptureLog.add("llm: download failed - ${t.message}")
             } finally {
                 busy = false

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Strings owned by the system-facing surfaces: the first-run flow, the capture and lens
+  notifications, and the model download status lines. English only in this file; the Spanish
+  pass gets a values-es/strings_system.xml with exactly these keys.
+-->
+<resources>
+
+    <!-- First-run flow (Onboarding.kt) -->
+    <string name="sys_onboarding_step1_title">Capture while you walk</string>
+    <string name="sys_onboarding_step1_body">One earbud tap starts a burst. Tap again and it stops. Your hands stay where they are.</string>
+    <string name="sys_onboarding_step2_title">Nothing leaves this phone</string>
+    <string name="sys_onboarding_step2_body">Transcription and writing run on-device. No account, no cloud: nothing you record is uploaded.</string>
+    <string name="sys_onboarding_step3_title">Record whatever\'s on your mind</string>
+    <string name="sys_onboarding_step3_body">We\'ll transcribe it, work out what it means, and file the note with insights of your choosing.</string>
+    <string name="sys_onboarding_action_continue">Continue</string>
+    <string name="sys_onboarding_action_get_started">Get started</string>
+    <string name="sys_onboarding_skip">Skip</string>
+    <string name="sys_onboarding_back_content_description">Back</string>
+    <string name="sys_onboarding_step_indicator">Step %1$d of %2$d</string>
+
+    <!-- Capture service notification (CaptureService.kt) -->
+    <string name="sys_capture_channel_name">Capture</string>
+    <string name="sys_capture_armed">Armed — tap pause on your podcast</string>
+    <string name="sys_capture_recording">Recording — %1$s</string>
+    <string name="sys_capture_processing_queued">Processing queued bursts</string>
+
+    <!-- Pipeline messages set by the capture service and shown on the record screen -->
+    <string name="sys_pipeline_waiting_for_speech_model">Waiting for the speech model</string>
+    <string name="sys_pipeline_speech_model_not_ready">Speech model not ready</string>
+    <string name="sys_pipeline_transcribe_failed">Could not transcribe that burst</string>
+    <string name="sys_pipeline_no_speech_detected">No speech detected in that burst</string>
+
+    <!-- Lens report notifications (LensService.kt) -->
+    <string name="sys_lens_channel_processing_name">Report in progress</string>
+    <string name="sys_lens_channel_processing_description">Shown while a lens report is being built</string>
+    <string name="sys_lens_channel_reports_name">Reports</string>
+    <string name="sys_lens_channel_reports_description">Tells you when a lens report is ready</string>
+    <string name="sys_lens_building_title">Building your report</string>
+    <string name="sys_lens_building_text">You can leave the app — we\'ll notify you when it\'s ready.</string>
+    <string name="sys_lens_report_ready_title">Report ready</string>
+    <string name="sys_lens_report_failed_title">Report failed</string>
+    <string name="sys_lens_report_ready_text">%1$s is ready for %2$s</string>
+    <string name="sys_lens_report_failed_text">Couldn\'t build %1$s for %2$s. Tap to open the space and try again.</string>
+
+    <!-- Speech model download status (ModelInstaller.kt) -->
+    <string name="sys_asr_status_not_installed">Speech model not installed</string>
+    <string name="sys_asr_status_installed">Parakeet installed (%1$d MB)</string>
+    <string name="sys_asr_status_downloading">Downloading %1$s</string>
+    <string name="sys_asr_status_verifying">Verifying %1$s</string>
+    <string name="sys_asr_status_incomplete">Download finished but files are incomplete</string>
+
+    <!-- Transform model download status (TransformModel.kt) -->
+    <string name="sys_llm_status_not_installed">Transform model not installed</string>
+    <string name="sys_llm_status_ready">LFM3-1.7B ready (%1$d MB)</string>
+
+    <!-- Shared by both model downloaders -->
+    <string name="sys_model_starting_download">Starting download</string>
+    <string name="sys_model_verifying">Verifying</string>
+    <string name="sys_model_download_failed">Download failed: %1$s</string>
+
+</resources>

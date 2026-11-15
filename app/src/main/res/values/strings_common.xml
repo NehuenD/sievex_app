@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Shared vocabulary: settings, modes, formats, pipeline steps and the built-in lens names.
+  Kept apart from the screen-by-screen strings so a translation pass can handle one file at a time.
+-->
+<resources>
+
+    <!-- Settings: language -->
+    <string name="common_language">Language</string>
+    <string name="common_language_english">English</string>
+    <string name="common_language_spanish">Spanish</string>
+    <string name="common_language_hint">The app and the notes it writes switch together.</string>
+
+    <!-- Stored note text that is displayed, not re-saved -->
+    <string name="common_today">Today</string>
+    <string name="common_untitled_note">Untitled note</string>
+
+    <!-- Note modes (stored canonical, displayed localised) -->
+    <string name="mode_insight">Insight</string>
+    <string name="mode_idea">Idea</string>
+    <string name="mode_action">Action</string>
+    <string name="mode_reference">Reference</string>
+    <string name="mode_question">Question</string>
+    <string name="mode_reflection">Reflection</string>
+    <string name="mode_note">Note</string>
+
+    <!-- Note formats -->
+    <string name="format_note">Note</string>
+    <string name="format_note_blurb">Summary, insight, question and tags</string>
+    <string name="format_list">List</string>
+    <string name="format_list_blurb">Short items, one per bullet</string>
+    <string name="format_steps">Steps</string>
+    <string name="format_steps_blurb">Ordered steps, one per line</string>
+    <string name="format_plain">Plain</string>
+    <string name="format_plain_blurb">What you said, nothing added</string>
+
+    <!-- Pipeline steps, shown on the record screen while a note is shaped -->
+    <string name="step_intent">Understanding intent</string>
+    <string name="step_dictation">Understanding the dictation</string>
+    <string name="step_title">Crafting title</string>
+    <string name="step_summary">Writing the summary</string>
+    <string name="step_items">Extracting items</string>
+    <string name="step_steps">Ordering the steps</string>
+    <string name="step_insights">Creating insights</string>
+    <string name="step_tags">Adding tags</string>
+    <string name="step_saving">Saving the note</string>
+
+    <!-- Built-in lenses (custom lenses keep the name and description the user wrote) -->
+    <string name="lens_insight_name">Insight</string>
+    <string name="lens_insight_description">What the space adds up to: where it stands, what repeats, the tensions and what to probe next.</string>
+    <string name="lens_brainstorm_name">Brainstorm</string>
+    <string name="lens_brainstorm_description">Angles the notes have not taken, combinations worth testing, wild ideas and a first experiment.</string>
+    <string name="lens_reading_name">Reading</string>
+    <string name="lens_reading_description">What to read or listen to next, why each one, and the gaps they would fill.</string>
+    <string name="lens_actions_name">Actions</string>
+    <string name="lens_actions_description">What to do next, what blocks it, and who owns it by when.</string>
+    <string name="lens_tensions_name">Tensions</string>
+    <string name="lens_tensions_description">Direct contradictions, how positions refined, and what stays unresolved.</string>
+    <string name="lens_timeline_name">Timeline</string>
+    <string name="lens_timeline_description">How the thinking moved, its turning points, and where it stands now.</string>
+
+</resources>

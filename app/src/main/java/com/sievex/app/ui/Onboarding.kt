@@ -2,6 +2,7 @@ package com.sievex.app.ui
 
 import android.content.Context
 import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -45,36 +46,39 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.sievex.app.R
 
 /** One page of the first-run flow: what it says, and what the primary button offers. */
 private data class OnboardingStep(
-    val heading: String,
-    val body: String,
-    val action: String
+    @StringRes val heading: Int,
+    @StringRes val body: Int,
+    @StringRes val action: Int
 )
 
 /**
  * Step 3 is the record screen's introduction, so its button is the record screen's button.
- * The wording is fixed: the three cards are the whole product pitch.
+ * The wording is fixed: the three cards are the whole product pitch. The pages hold resource
+ * ids rather than text, so the copy is resolved in composition in the chosen language.
  */
 private val onboardingSteps = listOf(
     OnboardingStep(
-        heading = "Capture while you walk",
-        body = "One earbud tap starts a burst. Tap again and it stops. Your hands stay where they are.",
-        action = "Continue"
+        heading = R.string.sys_onboarding_step1_title,
+        body = R.string.sys_onboarding_step1_body,
+        action = R.string.sys_onboarding_action_continue
     ),
     OnboardingStep(
-        heading = "Nothing leaves this phone",
-        body = "Transcription and writing run on-device. No account, no cloud: nothing you record is uploaded.",
-        action = "Continue"
+        heading = R.string.sys_onboarding_step2_title,
+        body = R.string.sys_onboarding_step2_body,
+        action = R.string.sys_onboarding_action_continue
     ),
     OnboardingStep(
-        heading = "Record whatever's on your mind",
-        body = "We'll transcribe it, work out what it means, and file the note with insights of your choosing.",
-        action = "Get started"
+        heading = R.string.sys_onboarding_step3_title,
+        body = R.string.sys_onboarding_step3_body,
+        action = R.string.sys_onboarding_action_get_started
     )
 )
 
@@ -126,7 +130,11 @@ fun OnboardingScreen(onDone: () -> Unit) {
                     .background(Signal, CircleShape)
             )
             Spacer(Modifier.width(8.dp))
-            Text("SievexAI", style = MaterialTheme.typography.labelSmall, color = Ink2)
+            Text(
+                stringResource(R.string.app_name),
+                style = MaterialTheme.typography.labelSmall,
+                color = Ink2
+            )
             Spacer(Modifier.weight(1f))
             // Absent on the last page: by then the button is the only thing left to do.
             if (step < onboardingSteps.lastIndex) {
@@ -162,13 +170,13 @@ fun OnboardingScreen(onDone: () -> Unit) {
                     val page = onboardingSteps[index]
                     Column(Modifier.fillMaxWidth()) {
                         Text(
-                            page.heading,
+                            stringResource(page.heading),
                             style = MaterialTheme.typography.headlineMedium,
                             color = Ink
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            page.body,
+                            stringResource(page.body),
                             style = MaterialTheme.typography.bodyLarge,
                             color = Ink2
                         )
@@ -191,7 +199,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
                 Spacer(Modifier.width(14.dp))
             }
             PrimaryAction(
-                label = onboardingSteps[step].action,
+                label = stringResource(onboardingSteps[step].action),
                 modifier = Modifier.weight(1f),
                 onClick = { if (step < onboardingSteps.lastIndex) step += 1 else finish() }
             )
@@ -264,11 +272,14 @@ private fun OnboardingMark() {
 /** Three capsules: the current one is Signal and wider, the rest are Line hairlines. */
 @Composable
 private fun StepIndicator(index: Int) {
+    // Resolved here, not inside the semantics block: that lambda is not composable.
+    val stepDescription =
+        stringResource(R.string.sys_onboarding_step_indicator, index + 1, onboardingSteps.size)
     Row(
         Modifier
             .fillMaxWidth()
             .semantics {
-                contentDescription = "Step ${index + 1} of ${onboardingSteps.size}"
+                contentDescription = stepDescription
             },
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
@@ -302,7 +313,11 @@ private fun SkipButton(onClick: () -> Unit) {
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text("Skip", style = MaterialTheme.typography.labelMedium, color = Ink2)
+        Text(
+            stringResource(R.string.sys_onboarding_skip),
+            style = MaterialTheme.typography.labelMedium,
+            color = Ink2
+        )
     }
 }
 
@@ -320,7 +335,7 @@ private fun BackButton(onClick: () -> Unit) {
     ) {
         Icon(
             Icons.Filled.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = stringResource(R.string.sys_onboarding_back_content_description),
             tint = Ink,
             modifier = Modifier.size(20.dp)
         )

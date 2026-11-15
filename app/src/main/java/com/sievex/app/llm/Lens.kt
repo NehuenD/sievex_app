@@ -55,9 +55,10 @@ object Lens {
         filesDir: File,
         space: Space,
         notes: List<StoredNote>,
-        spec: LensSpec
+        spec: LensSpec,
+        language: String = "en"
     ): LensArtifact? =
-        runCatching { LlmGate.exclusive { generateUnsafe(filesDir, space, notes, spec) } }
+        runCatching { LlmGate.exclusive { generateUnsafe(filesDir, space, notes, spec, language) } }
             .onFailure { CaptureLog.add("lens ${spec.id}: failed - ${it.message}") }
             .getOrNull()
 
@@ -65,7 +66,8 @@ object Lens {
         filesDir: File,
         space: Space,
         notes: List<StoredNote>,
-        spec: LensSpec
+        spec: LensSpec,
+        language: String
     ): LensArtifact? {
         // Nothing to read: a report over zero notes could only be invented.
         if (notes.isEmpty()) {
@@ -80,7 +82,7 @@ object Lens {
 
         val started = System.currentTimeMillis()
         // No grammar here: unlike Transform, the reply is markdown, so sampling stays free-form.
-        val raw = LlamaBridge.complete(buildPrompt(space, notes, spec), MAX_TOKENS)
+        val raw = LlamaBridge.complete(buildPrompt(space, notes, spec, language), MAX_TOKENS)
         val ms = System.currentTimeMillis() - started
         CaptureLog.add(
             "lens ${spec.id}: %d chars from %d notes in %d ms".format(raw.length, notes.size, ms)
@@ -116,9 +118,17 @@ object Lens {
      * instruction already spells out this exact ordered list — every built-in does — the clause
      * is skipped, so the model is never shown two competing copies of the same outline.
      */
-    private fun systemPrompt(spec: LensSpec): String {
+    private fun systemPrompt(spec: LensSpec, language: String): String {
         val instruction = spec.instruction.trim()
-        return instruction + headingClause(instruction, sections(spec))
+        val base = instruction + headingClause(instruction, sections(spec))
+        // The instructions stay English (they are tuned), the report does not. The heading list
+        // above is English too, so Spanish asks for a translation of it, order preserved.
+        return if (language == "es") {
+            base + "\n\nWrite the whole report in Spanish, including the section headings: " +
+                "translate each heading, keep the order and the number of sections, and add none."
+        } else {
+            base
+        }
     }
 
     /** Trimmed, non-blank, de-duplicated heading names, original order kept. */
@@ -145,10 +155,15 @@ object Lens {
      * ChatML, with the assistant turn prefilled with `##` so the model continues in markdown
      * instead of opening a sentence. Notes go in newest first, which is the order NoteStore gives.
      */
-    private fun buildPrompt(space: Space, notes: List<StoredNote>, spec: LensSpec): String =
+    private fun buildPrompt(
+        space: Space,
+        notes: List<StoredNote>,
+        spec: LensSpec,
+        language: String
+    ): String =
         buildString {
             append("<|im_start|>system\n")
-            append(systemPrompt(spec))
+            append(systemPrompt(spec, language))
             append("<|im_end|>\n")
             append("<|im_start|>user\n")
             append("Space: ").append(flat(space.name, TITLE_CHARS).ifBlank { "Untitled space" })

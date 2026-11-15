@@ -7,12 +7,18 @@ import androidx.compose.runtime.setValue
 enum class PipelineStage { IDLE, TRANSCRIBING, TRANSFORMING, DONE, FAILED }
 
 /**
+ * One action inside the transform, as a key rather than a sentence: the UI owns the words, so
+ * the status card can be English or Spanish without the service knowing either language.
+ */
+enum class PipelineStep { INTENT, DICTATION, TITLE, SUMMARY, ITEMS, STEPS, INSIGHTS, TAGS, SAVING }
+
+/**
  * Observable state of the background pipeline. The service writes, the UI reads.
  *
- * [step] is the action inside the transform, reported by the native decode loop as the JSON
- * fields appear, so the status card can name what the phone is doing instead of naming a model.
- * The label depends on the format: a list is "extracting items", a note is "writing the summary".
- * Kept in memory only: it describes the current burst, not history.
+ * [step] is reported by the native decode loop as the JSON fields appear, so the status card can
+ * name what the phone is doing instead of naming a model. The label depends on the format: a list
+ * is "extracting items", a note is "writing the summary". Kept in memory only: it describes the
+ * current burst, not history.
  */
 object Pipeline {
 
@@ -25,8 +31,8 @@ object Pipeline {
     var lastTitle by mutableStateOf("")
         private set
 
-    /** One action label inside [PipelineStage.TRANSFORMING]; blank when not transforming. */
-    var step by mutableStateOf("")
+    /** One action inside [PipelineStage.TRANSFORMING]; null when not transforming. */
+    var step by mutableStateOf<PipelineStep?>(null)
         private set
 
     /**
@@ -37,13 +43,13 @@ object Pipeline {
     var blocked by mutableStateOf(false)
         private set
 
-    /** The format being shaped, so phase numbers map to the right words. */
+    /** The format being shaped, so phase numbers map to the right step. */
     private var stepFormat = NoteFormat.NOTE
 
     fun transcribing() {
         stage = PipelineStage.TRANSCRIBING
         detail = ""
-        step = ""
+        step = null
         blocked = false
     }
 
@@ -51,42 +57,43 @@ object Pipeline {
         stage = PipelineStage.TRANSFORMING
         detail = ""
         stepFormat = format
-        step = labelFor(format, 1) ?: "Understanding intent"
+        step = stepFor(format, 1)
         blocked = false
     }
 
     /**
      * Moves [step] for the phase the native side just reached. Unknown numbers are ignored, so a
-     * native change can never blank the label.
+     * native change can never blank the step.
      */
     fun transformingStep(phase: Int) {
         stage = PipelineStage.TRANSFORMING
-        labelFor(stepFormat, phase)?.let { step = it }
+        stepFor(stepFormat, phase)?.let { step = it }
     }
 
     fun done(title: String) {
         stage = PipelineStage.DONE
         lastTitle = title
         detail = ""
-        step = ""
+        step = null
         blocked = false
     }
 
     fun failed(reason: String) {
         stage = PipelineStage.FAILED
         detail = reason
-        step = ""
+        step = null
         blocked = false
     }
 
     /**
      * A failure that is really a hold: nothing was lost, the burst waits for a model.
      * Unlike [failed], the UI clears this state on its own once both models are installed.
+     * The reason is already localised by the caller, which has a Context.
      */
     fun block(reason: String) {
         stage = PipelineStage.FAILED
         detail = reason
-        step = ""
+        step = null
         blocked = true
     }
 
@@ -94,7 +101,7 @@ object Pipeline {
         stage = PipelineStage.IDLE
         detail = ""
         lastTitle = ""
-        step = ""
+        step = null
         blocked = false
     }
 
@@ -102,20 +109,20 @@ object Pipeline {
      * Phase numbers come from `LlamaBridge.TransformProgress`: 1 is the start of generation, then
      * the grammar-pinned field keys (`title`, `one_line` or `items`, `why_it_matters`, `tags`).
      */
-    private fun labelFor(format: NoteFormat, phase: Int): String? = when (phase) {
+    private fun stepFor(format: NoteFormat, phase: Int): PipelineStep? = when (phase) {
         1 -> when (format) {
-            NoteFormat.LIST, NoteFormat.STEPS -> "Understanding the dictation"
-            NoteFormat.PLAIN -> "Saving the note"
-            else -> "Understanding intent"
+            NoteFormat.LIST, NoteFormat.STEPS -> PipelineStep.DICTATION
+            NoteFormat.PLAIN -> PipelineStep.SAVING
+            else -> PipelineStep.INTENT
         }
-        2 -> "Crafting title"
+        2 -> PipelineStep.TITLE
         3 -> when (format) {
-            NoteFormat.LIST -> "Extracting items"
-            NoteFormat.STEPS -> "Ordering the steps"
-            else -> "Writing the summary"
+            NoteFormat.LIST -> PipelineStep.ITEMS
+            NoteFormat.STEPS -> PipelineStep.STEPS
+            else -> PipelineStep.SUMMARY
         }
-        4 -> "Creating insights"
-        5 -> "Adding tags"
+        4 -> PipelineStep.INSIGHTS
+        5 -> PipelineStep.TAGS
         else -> null
     }
 }

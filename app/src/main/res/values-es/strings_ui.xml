@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Spanish counterpart of values/strings_ui.xml. Keys, order and format placeholders must
+  match the English file exactly.
+  Escapes below are Android resource escapes, not XML entities: \' for an apostrophe,
+  \" for a quote and %% for a literal percent sign.
+-->
+<resources>
+
+    <!-- Shell: navigation tabs and shared actions -->
+    <string name="ui_tab_record">Grabar</string>
+    <string name="ui_tab_spaces">Espacios</string>
+    <string name="ui_tab_notes">Notas</string>
+    <string name="ui_tab_actions">Acciones</string>
+    <string name="ui_tab_settings">Ajustes</string>
+    <string name="ui_brand_name">SievexAI</string>
+    <string name="ui_action_back">Atrás</string>
+    <string name="ui_action_edit">Editar</string>
+    <string name="ui_action_cancel">Cancelar</string>
+    <string name="ui_action_save">Guardar</string>
+    <string name="ui_action_change">Cambiar</string>
+    <string name="ui_action_remove">Quitar</string>
+    <string name="ui_action_on">Activado</string>
+    <string name="ui_action_off">Desactivado</string>
+    <string name="ui_action_stop">Detener</string>
+
+    <!-- Spaces: name, pick, delete, edit -->
+    <string name="ui_space_new">Nuevo espacio</string>
+    <string name="ui_space_create">Crear espacio</string>
+    <string name="ui_space_delete_title">¿Eliminar \"%1$s\"?</string>
+    <string name="ui_space_delete_body">Sus informes se eliminan con él. Las notas de dentro se conservan y pasan a Sin espacio.</string>
+    <string name="ui_space_delete_confirm">Eliminar espacio</string>
+    <string name="ui_space_open_action">Abrir espacio</string>
+    <string name="ui_space_none">Sin espacio</string>
+    <string name="ui_space_name_placeholder">Ponle nombre a este espacio</string>
+    <string name="ui_space_chip_active">Espacio: %1$s</string>
+    <string name="ui_space_chip_none">Espacio: ninguno</string>
+    <string name="ui_space_picker_record_title">Grabar en un espacio</string>
+    <string name="ui_space_picker_note_title">Archivar nota en un espacio</string>
+    <string name="ui_space_picker_new_note_title">Archivar en un espacio</string>
+    <string name="ui_space_picker_empty">Aún no hay espacios. Crea uno en la pestaña Espacios.</string>
+    <string name="ui_spaces_subtitle">Un contenedor para notas relacionadas.</string>
+    <string name="ui_spaces_hold_to_delete">Mantén pulsado un espacio para eliminarlo.</string>
+    <string name="ui_spaces_empty">Aún no hay espacios. Un espacio agrupa notas relacionadas; su hallazgo es una transformación sobre todas ellas.</string>
+    <string name="ui_space_no_report">aún sin informe</string>
+    <string name="ui_space_report_age">informe %1$s</string>
+    <string name="ui_space_insights_subtab">Hallazgos</string>
+    <string name="ui_space_empty_notes">Aún no hay notas en este espacio. Abre una nota en Notas y ajusta su fila Espacio.</string>
+    <string name="ui_space_hold_chip_hint">Mantén pulsado un chip para quitar esa lente del espacio.</string>
+    <string name="ui_space_edit_title">Editar espacio</string>
+    <string name="ui_placeholder_space_description">Para qué sirve este espacio, en tus palabras</string>
+
+    <!-- Capture card and record screen -->
+    <string name="ui_capture_status_recording">GRABANDO</string>
+    <string name="ui_capture_status_armed">EN ESPERA</string>
+    <string name="ui_capture_status_ready">LISTO</string>
+    <string name="ui_capture_body_recording">Grabando tu ráfaga.</string>
+    <string name="ui_capture_body_armed">Escuchando. Toca pausa en tu pódcast o graba ahora.</string>
+    <string name="ui_capture_body_ready">Activa la escucha para detectar una pausa del pódcast.</string>
+    <string name="ui_capture_enable_notification_access">Permitir acceso a notificaciones</string>
+    <string name="ui_capture_record_now">Grabar ahora</string>
+    <string name="ui_capture_disarm">Desactivar</string>
+    <string name="ui_capture_arm">Activar captura</string>
+    <string name="ui_record_subtitle_ready">Toca para grabar, toca otra vez para parar</string>
+    <string name="ui_record_subtitle_setup">Termina la configuración primero</string>
+    <string name="ui_record_setup_body">El modelo de voz siempre hace falta. Dar forma a una Nota, Lista o Pasos también necesita el modelo de transformación; Texto no.</string>
+    <string name="ui_record_stage_transcribing">TRANSCRIBIENDO AUDIO</string>
+    <string name="ui_record_stage_failed">NADA ARCHIVADO</string>
+    <string name="ui_record_tap_to_record">Toca para grabar</string>
+    <string name="ui_record_recording">Grabando</string>
+    <string name="ui_record_hint">Pulsa el círculo, habla, pulsa otra vez</string>
+    <string name="ui_record_podcast_trigger_on">Disparador de pódcast: activado</string>
+    <string name="ui_record_podcast_trigger_off">Disparador de pódcast: desactivado</string>
+    <string name="ui_record_note_ready">NOTA LISTA</string>
+    <string name="ui_record_view_in_notes">Ver en Notas</string>
+
+    <!-- Notes list -->
+    <string name="ui_notes_new_note">Nueva nota</string>
+    <string name="ui_notes_recent">RECIENTES</string>
+    <string name="ui_notes_empty">Aún no hay nada grabado. Activa la captura, importa el modelo en Ajustes y luego toca pausa en tu pódcast.</string>
+    <string name="ui_notes_count_one">1 nota</string>
+    <string name="ui_notes_count_many">%1$d notas</string>
+    <string name="ui_note_edited">editada</string>
+
+    <!-- Model setup cards -->
+    <string name="ui_speech_model">MODELO DE VOZ</string>
+    <string name="ui_speech_model_blurb">Una sola descarga, 640 MB. Después todo funciona en el dispositivo.</string>
+    <string name="ui_speech_model_download">Descargar modelo de voz</string>
+    <string name="ui_transform_model">MODELO DE TRANSFORMACIÓN</string>
+    <string name="ui_transform_model_blurb">LFM3-1.7B, 1.1 GB. Da a cada nota su modo, título, por qué importa y una pregunta abierta.</string>
+    <string name="ui_transform_model_download">Descargar modelo de transformación</string>
+
+    <!-- Note detail -->
+    <string name="ui_note_label">NOTA</string>
+    <string name="ui_note_reanalyze">Reanalizar</string>
+    <string name="ui_note_reprocessing">Reprocesando en el dispositivo…</string>
+    <string name="ui_note_reprocess_failed">No se pudo reprocesar esta nota. Vuelve a intentarlo desde Ajustes si falta el modelo.</string>
+    <!-- \u0020 keeps the trailing space this label had when it was a Kotlin literal. -->
+    <string name="ui_note_space_label">Espacio:\u0020</string>
+    <string name="ui_note_tag">#%1$s</string>
+    <string name="ui_reprocess_title">Reprocesar esta nota</string>
+    <string name="ui_reprocess_body">Esto vuelve a pasar el formato elegido sobre tus palabras y sustituye el título, el resumen, el hallazgo y las etiquetas. Tu texto no se toca.</string>
+    <string name="ui_reprocess_confirm">Reprocesar</string>
+
+    <!-- Section labels shared by the note detail and the editor -->
+    <string name="ui_section_what_i_said">LO QUE DIJE</string>
+    <string name="ui_section_why_it_matters">POR QUÉ IMPORTA</string>
+    <string name="ui_section_open_question">PREGUNTA ABIERTA</string>
+    <string name="ui_section_items">ELEMENTOS</string>
+    <string name="ui_section_steps">PASOS</string>
+    <string name="ui_section_space">ESPACIO</string>
+    <string name="ui_section_format">FORMATO</string>
+    <string name="ui_section_title">TÍTULO</string>
+    <string name="ui_section_one_line">EN UNA LÍNEA</string>
+    <string name="ui_section_mode">MODO</string>
+    <string name="ui_section_tags">ETIQUETAS</string>
+    <string name="ui_section_name">NOMBRE</string>
+    <string name="ui_section_description">DESCRIPCIÓN</string>
+    <string name="ui_section_instruction">INSTRUCCIÓN</string>
+    <string name="ui_section_sections">SECCIONES</string>
+    <string name="ui_section_text">TEXTO</string>
+
+    <!-- Note editor -->
+    <string name="ui_editor_title">EDITAR NOTA</string>
+    <string name="ui_editor_format">FORMATO · %1$s</string>
+    <string name="ui_editor_format_hint">Cambia el formato reprocesando esta nota.</string>
+    <string name="ui_editor_save_hint">Guardar reescribe las palabras de esta nota y la marca como editada. Su grabación y su espacio quedan tal cual.</string>
+    <string name="ui_placeholder_title">De qué trata esta nota</string>
+    <string name="ui_placeholder_one_line">La nota en una frase</string>
+    <string name="ui_placeholder_items">Un elemento por línea</string>
+    <string name="ui_placeholder_what_i_said">Tus palabras, tal como se grabaron</string>
+    <string name="ui_placeholder_why">Opcional: por qué vale la pena guardarlo</string>
+    <string name="ui_placeholder_question">Opcional: qué queda sin resolver</string>
+    <string name="ui_placeholder_tags">producto, estrategia</string>
+
+    <!-- New hand-written note -->
+    <string name="ui_new_note_title">NUEVA NOTA</string>
+    <string name="ui_new_note_shaping">Dando forma a la nota…</string>
+    <string name="ui_new_note_saving">Guardando…</string>
+    <string name="ui_new_note_shape_with_ai">Dar forma con IA</string>
+    <string name="ui_new_note_plain_hint">Texto deja tus palabras tal como las escribes.</string>
+    <string name="ui_new_note_no_model">El modelo de transformación no está instalado, así que esta nota se guarda como texto. Añádelo en Ajustes para dar forma a las notas.</string>
+    <string name="ui_placeholder_new_note_text">Lo que quieres guardar</string>
+    <string name="ui_placeholder_new_note_title">Opcional: se usa tal cual</string>
+
+    <!-- Settings -->
+    <string name="ui_settings_subtitle">Todo local. Sin cuenta ni nube.</string>
+    <string name="ui_settings_capture_service">Servicio de captura</string>
+    <string name="ui_settings_armed">En espera</string>
+    <string name="ui_settings_disarmed">Desactivado</string>
+    <string name="ui_settings_recording">Grabando</string>
+    <string name="ui_settings_live">Activo</string>
+    <string name="ui_settings_idle">Sin actividad</string>
+    <string name="ui_settings_transcription">Transcripción</string>
+    <string name="ui_settings_transcription_value">Parakeet TDT 0.6B v3</string>
+    <string name="ui_settings_transform">Transformación</string>
+    <string name="ui_settings_transform_value">LFM3-1.7B</string>
+    <string name="ui_settings_speech_model_body">Parakeet TDT 0.6B v3, 640 MB. Se descarga una vez por HTTPS y se verifica con sumas de comprobación fijas. Después la app funciona totalmente sin conexión.</string>
+    <string name="ui_settings_model_ready">Modelo listo</string>
+    <string name="ui_settings_model_progress">%1$d%%</string>
+    <string name="ui_settings_download_model">Descargar modelo (640 MB)</string>
+    <string name="ui_settings_event_log">REGISTRO DE EVENTOS</string>
+    <string name="ui_settings_no_events">aún sin eventos</string>
+
+    <!-- Lenses -->
+    <string name="ui_lens_add">Añadir una lente</string>
+    <string name="ui_lens_add_chip">+ Añadir lente</string>
+    <string name="ui_lens_generate">Generar</string>
+    <string name="ui_lens_regenerate">Regenerar</string>
+    <string name="ui_lens_working">Trabajando en segundo plano. Puedes salir de esta pantalla: te avisamos cuando el informe esté listo.</string>
+    <string name="ui_lens_failed">No se generó ningún informe. Revisa el modelo de transformación en Ajustes y vuelve a intentarlo.</string>
+    <string name="ui_lens_needs_notes">Un espacio necesita al menos una nota para que una lente pueda decir algo.</string>
+    <string name="ui_lens_stale_hint">Las notas cambiaron desde que se generó. Regenera para ponerlo al día.</string>
+    <string name="ui_lens_none_title">SIN LENTES EN ESTE ESPACIO</string>
+    <string name="ui_lens_none_body">Una lente es una forma de leer todas las notas de este espacio: elige los encabezados, cita las notas que usó y se puede regenerar cuando quieras.</string>
+    <string name="ui_lens_empty_title">AÚN SIN %1$s</string>
+    <string name="ui_lens_empty_body">Lee todas las notas de este espacio y cita las que usó. No se escribe nada hasta que lo generes.</string>
+    <string name="ui_lens_from_notes">de %1$d notas · %2$s</string>
+    <string name="ui_lens_show_action">Mostrar %1$s</string>
+    <string name="ui_lens_remove_action">Quitar %1$s de este espacio</string>
+    <string name="ui_lens_remove_title">¿Quitar \"%1$s\" de este espacio?</string>
+    <string name="ui_lens_remove_body_builtin">Esto solo quita la lente de este espacio. Sus informes siguen en el disco y puedes volver a añadirla cuando quieras.</string>
+    <string name="ui_lens_remove_body_custom">Quitarla la saca de este espacio y conserva todos los informes que generó. Eliminarla borra la lente en sí, así que ningún espacio podrá usarla otra vez.</string>
+    <string name="ui_lens_delete">Eliminar lente</string>
+    <string name="ui_lens_picker_body">Una lente es una forma de leer las notas de este espacio. Activar una le da su propio informe; las lentes nunca se sobrescriben.</string>
+    <string name="ui_lens_picker_empty">Todas las lentes ya están en este espacio.</string>
+    <string name="ui_lens_picker_new_custom">Nueva lente personalizada…</string>
+    <string name="ui_lens_custom_badge">PERSONALIZADA</string>
+    <string name="ui_lens_custom_title">Nueva lente personalizada</string>
+    <string name="ui_lens_custom_body">La instrucción es el cuerpo del prompt: di qué hay que producir. Los encabezados se aplican por encima.</string>
+    <string name="ui_lens_create">Crear lente</string>
+    <string name="ui_placeholder_lens_name">p. ej. Riesgos</string>
+    <string name="ui_placeholder_lens_description">Una línea: para qué sirve esta lente</string>
+    <string name="ui_placeholder_lens_instruction">Qué debe hacer el informe</string>
+    <string name="ui_placeholder_lens_sections">Qué puede salir mal, Señales tempranas, Mitigaciones</string>
+
+    <!-- Actions screen -->
+    <string name="ui_actions_pending">%1$d pendientes</string>
+    <string name="ui_actions_empty">Nada pendiente. Las capturas en modo Acción llegan aquí.</string>
+
+    <!-- Relative ages, shown on space rows and lens reports -->
+    <string name="ui_age_never">nunca</string>
+    <string name="ui_age_just_now">ahora mismo</string>
+    <string name="ui_age_minutes">hace %1$dm</string>
+    <string name="ui_age_hours">hace %1$dh</string>
+    <string name="ui_age_days">hace %1$dd</string>
+    <string name="ui_age_weeks">hace %1$ds</string>
+
+    <!-- Status chips -->
+    <string name="ui_stale">DESACTUALIZADO</string>
+
+</resources>

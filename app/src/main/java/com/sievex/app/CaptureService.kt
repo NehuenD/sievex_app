@@ -71,6 +71,11 @@ class CaptureService : Service() {
     private val mainHandler: Handler by lazy { Handler(Looper.getMainLooper()) }
     private val retryRunnable = Runnable { processNext() }
 
+    /** Notification text follows the language chosen in Settings, like the rest of the app. */
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocale.wrap(newBase))
+    }
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -79,7 +84,7 @@ class CaptureService : Service() {
         Formats.restore(this)
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL, "Capture", NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel(CHANNEL, getString(R.string.sys_capture_channel_name), NotificationManager.IMPORTANCE_LOW)
         )
         // Parsing notes.json/jobs.json and scanning for orphans is file work, so it runs on the
         // same single worker that drains the queue: every store read is then ordered behind init.
@@ -143,7 +148,7 @@ class CaptureService : Service() {
         armed = true
         // The service now has a reason of its own: a drain must not take its notification back.
         kickDrain = false
-        startForeground(NOTIF_ID, buildNotification("Armed — tap pause on your podcast"), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+        startForeground(NOTIF_ID, buildNotification(getString(R.string.sys_capture_armed)), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
         // Otherwise the first burst of every process pays the 652 MB encoder load and the 1.1 GB
         // LLM load inside the user's wait. Warming on the queue worker keeps the loads ordered
         // behind store init and off the thread that opens the microphone.
@@ -231,7 +236,7 @@ class CaptureService : Service() {
         // kills the process. When the service is already armed its slot and text are its own.
         if (!armed) {
             val raised = runCatching {
-                startForeground(NOTIF_ID, buildNotification("Processing queued bursts"))
+                startForeground(NOTIF_ID, buildNotification(getString(R.string.sys_capture_processing_queued)))
             }
             if (raised.isFailure) {
                 // Never leave the foreground obligation hanging: stopping clears it. The queue
@@ -296,7 +301,7 @@ class CaptureService : Service() {
         // processBurst(); do not paint "Recording" over a burst that is gone.
         if (recording) {
             val nm = getSystemService(NotificationManager::class.java)
-            nm.notify(NOTIF_ID, buildNotification("Recording — ${file.name}"))
+            nm.notify(NOTIF_ID, buildNotification(getString(R.string.sys_capture_recording, file.name)))
         }
     }
 
@@ -308,7 +313,7 @@ class CaptureService : Service() {
         recorder?.stop()
         recorder = null
         val nm = getSystemService(NotificationManager::class.java)
-        nm.notify(NOTIF_ID, buildNotification("Armed — tap pause on your podcast"))
+        nm.notify(NOTIF_ID, buildNotification(getString(R.string.sys_capture_armed)))
     }
 
     /**
@@ -337,7 +342,7 @@ class CaptureService : Service() {
             Pipeline.transcribing()
             if (armed) {
                 val nm = getSystemService(NotificationManager::class.java)
-                nm.notify(NOTIF_ID, buildNotification("Armed — tap pause on your podcast"))
+                nm.notify(NOTIF_ID, buildNotification(getString(R.string.sys_capture_armed)))
             }
         }
         // The stores load on the worker; a burst that ends before that must not add its job to an
@@ -443,8 +448,7 @@ class CaptureService : Service() {
         CaptureLog.add("jobs: retry in ${RETRY_DELAY_MS / 1000}s")
     }
 
-    /** The queue is empty: the foreground slot exists only for the queue, so give it back. */
-    private fun onQueueEmpty() {
+    /** The queue is empty: the foreground slot exists only for the queue, so give it back. */    private fun onQueueEmpty() {
         if (armed || recording) return
         if (JobQueue.peek() != null) return
         // Nothing is waiting: whatever the models were kept warm for is over. This runs before the
@@ -491,7 +495,7 @@ class CaptureService : Service() {
         if (!AsrEngine.isInstalled(filesDir)) {
             CaptureLog.add("asr not installed, holding ${file.name}")
             held = true
-            Pipeline.block("Waiting for the speech model")
+            Pipeline.block(getString(R.string.sys_pipeline_waiting_for_speech_model))
             return false
         }
 
@@ -508,7 +512,7 @@ class CaptureService : Service() {
         if (!AsrEngine.ensureLoaded(filesDir)) {
             CaptureLog.add("asr not ready, holding ${file.name}")
             held = true
-            Pipeline.block("Speech model not ready")
+            Pipeline.block(getString(R.string.sys_pipeline_speech_model_not_ready))
             return false
         }
 
@@ -520,7 +524,7 @@ class CaptureService : Service() {
         // so it keeps the normal attempt-and-retry path.
         if (text == null) {
             CaptureLog.add("job ${job.id}: asr returned no result")
-            Pipeline.failed("Could not transcribe that burst")
+            Pipeline.failed(getString(R.string.sys_pipeline_transcribe_failed))
             retryOrDrop(job, "asr returned no result")
             return false
         }
@@ -535,7 +539,7 @@ class CaptureService : Service() {
             quarantineWav(job, "no speech detected")
             JobQueue.remove(job.id)
             CaptureLog.add("job ${job.id}: blank transcript, ${file.name} quarantined")
-            Pipeline.failed("No speech detected in that burst")
+            Pipeline.failed(getString(R.string.sys_pipeline_no_speech_detected))
             return true
         }
 
@@ -543,7 +547,12 @@ class CaptureService : Service() {
         Pipeline.transforming(format)
         val time = SimpleDateFormat("HH:mm", Locale.US).format(Date())
         val whenText = "Today $time"
-        val structured = Transform.apply(filesDir, text, format) { phase ->
+        val structured = Transform.apply(
+            filesDir,
+            text,
+            format,
+            AppLocale.modelLanguage(this)
+        ) { phase ->
             Pipeline.transformingStep(phase)
         }
 
@@ -573,7 +582,7 @@ class CaptureService : Service() {
             CaptureLog.add("transform unavailable, filing raw transcript")
             StoredNote(
                 id = NoteStore.nextId(),
-                title = title.ifBlank { "Untitled note" },
+                title = title.ifBlank { getString(R.string.common_untitled_note) },
                 oneLine = "",
                 mode = "Note",
                 whenText = whenText,
@@ -700,7 +709,7 @@ class CaptureService : Service() {
 
     private fun buildNotification(text: String): Notification =
         NotificationCompat.Builder(this, CHANNEL)
-            .setContentTitle("SievexAI")
+            .setContentTitle(getString(R.string.app_name))
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setOngoing(true)

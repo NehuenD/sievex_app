@@ -1,5 +1,6 @@
 package com.sievex.app
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -22,6 +23,11 @@ class MainActivity : ComponentActivity() {
      */
     private var targetSpaceId by mutableStateOf<String?>(null)
     private var targetLensId by mutableStateOf<String?>(null)
+
+    /** Resolve every resource in the language chosen in Settings before the UI is created. */
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocale.wrap(newBase))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

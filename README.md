@@ -4,7 +4,9 @@ Personal Android app that turns a spoken thought into a structured note, entirel
 listens for a podcast pause, records a 20–60 s burst, transcribes it, and shapes it into a note with
 a mode, title, one line, the verbatim text, an inferred *why it matters*, an open question and tags.
 
-No cloud, no accounts. The network is used once, for the checksum-pinned model download.
+No cloud, no accounts. The network is used once, for the checksum-pinned model download. The
+interface and the notes it writes are available in English and Spanish; Settings switches both at
+once.
 
 ## What it does today
 
@@ -22,6 +24,8 @@ title, one line, why it matters, open question, tags), **List** and **Steps** (t
 items or ordered steps, no insight fields), and **Plain** (your words and a derived title, no model
 at all). `verbatim` is the ASR text, never regenerated. The recording status names actions
 (transcribing audio → understanding intent → crafting title → creating insights), not models.
+The model writes note fields and space reports in the app's language; the transcript is never
+translated.
 
 **Write and reshape** — the Notes tab has a *New note* composer: type instead of dictating,
 optionally shape it with AI, pick a space and a format. Any note can be reprocessed later with a

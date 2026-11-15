@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Spanish counterpart of values/strings_system.xml. Keys, order and format placeholders must
+  match the English file exactly.
+-->
+<resources>
+
+    <!-- First-run flow (Onboarding.kt) -->
+    <string name="sys_onboarding_step1_title">Graba mientras caminas</string>
+    <string name="sys_onboarding_step1_body">Un toque en el auricular inicia una ráfaga. Otro toque la detiene. Las manos siguen donde están.</string>
+    <string name="sys_onboarding_step2_title">Nada sale de este teléfono</string>
+    <string name="sys_onboarding_step2_body">La transcripción y la escritura se hacen en el dispositivo. Sin cuenta ni nube: nada de lo que grabas se sube.</string>
+    <string name="sys_onboarding_step3_title">Graba lo que tengas en mente</string>
+    <string name="sys_onboarding_step3_body">Lo transcribimos, sacamos qué significa y archivamos la nota con los hallazgos que elijas.</string>
+    <string name="sys_onboarding_action_continue">Continuar</string>
+    <string name="sys_onboarding_action_get_started">Empezar</string>
+    <string name="sys_onboarding_skip">Saltar</string>
+    <string name="sys_onboarding_back_content_description">Atrás</string>
+    <string name="sys_onboarding_step_indicator">Paso %1$d de %2$d</string>
+
+    <!-- Capture service notification (CaptureService.kt) -->
+    <string name="sys_capture_channel_name">Captura</string>
+    <string name="sys_capture_armed">En espera: toca pausa en tu pódcast</string>
+    <string name="sys_capture_recording">Grabando: %1$s</string>
+    <string name="sys_capture_processing_queued">Procesando ráfagas en cola</string>
+
+    <!-- Pipeline messages set by the capture service and shown on the record screen -->
+    <string name="sys_pipeline_waiting_for_speech_model">Esperando al modelo de voz</string>
+    <string name="sys_pipeline_speech_model_not_ready">El modelo de voz no está listo</string>
+    <string name="sys_pipeline_transcribe_failed">No se pudo transcribir esa ráfaga</string>
+    <string name="sys_pipeline_no_speech_detected">No se detectó voz en esa ráfaga</string>
+
+    <!-- Lens report notifications (LensService.kt) -->
+    <string name="sys_lens_channel_processing_name">Informe en curso</string>
+    <string name="sys_lens_channel_processing_description">Se muestra mientras se genera un informe de lente</string>
+    <string name="sys_lens_channel_reports_name">Informes</string>
+    <string name="sys_lens_channel_reports_description">Te avisa cuando un informe de lente está listo</string>
+    <string name="sys_lens_building_title">Generando tu informe</string>
+    <string name="sys_lens_building_text">Puedes salir de la app: te avisamos cuando esté listo.</string>
+    <string name="sys_lens_report_ready_title">Informe listo</string>
+    <string name="sys_lens_report_failed_title">No se pudo generar el informe</string>
+    <string name="sys_lens_report_ready_text">%1$s ya está disponible para %2$s</string>
+    <string name="sys_lens_report_failed_text">No se pudo generar %1$s para %2$s. Toca para abrir el espacio y reintentar.</string>
+
+    <!-- Speech model download status (ModelInstaller.kt) -->
+    <string name="sys_asr_status_not_installed">Modelo de voz no instalado</string>
+    <string name="sys_asr_status_installed">Parakeet instalado (%1$d MB)</string>
+    <string name="sys_asr_status_downloading">Descargando %1$s</string>
+    <string name="sys_asr_status_verifying">Verificando %1$s</string>
+    <string name="sys_asr_status_incomplete">La descarga terminó, pero los archivos están incompletos</string>
+
+    <!-- Transform model download status (TransformModel.kt) -->
+    <string name="sys_llm_status_not_installed">Modelo de transformación no instalado</string>
+    <string name="sys_llm_status_ready">LFM3-1.7B listo (%1$d MB)</string>
+
+    <!-- Shared by both model downloaders -->
+    <string name="sys_model_starting_download">Iniciando descarga</string>
+    <string name="sys_model_verifying">Verificando</string>
+    <string name="sys_model_download_failed">Error en la descarga: %1$s</string>
+
+</resources>
