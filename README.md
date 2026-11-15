@@ -17,9 +17,16 @@ then queued in a durable JSON queue, so a process death or reboot never loses a 
 threads.
 
 **Shape** — LFM3-1.7B Q4_K_M through a small llama.cpp JNI shim. The reply is grammar-constrained
-JSON, so it either parses or cannot be produced: mode, title, one line, why it matters, open
-question, tags. `verbatim` is the ASR text, never regenerated. The recording status names actions
+JSON, so it either parses or cannot be produced. Four formats decide the shape: **Note** (mode,
+title, one line, why it matters, open question, tags), **List** and **Steps** (title plus short
+items or ordered steps, no insight fields), and **Plain** (your words and a derived title, no model
+at all). `verbatim` is the ASR text, never regenerated. The recording status names actions
 (transcribing audio → understanding intent → crafting title → creating insights), not models.
+
+**Write and reshape** — the Notes tab has a *New note* composer: type instead of dictating,
+optionally shape it with AI, pick a space and a format. Any note can be reprocessed later with a
+format of your choice from its detail screen; only the model's fields are replaced, never your text,
+and reprocessing does not mark the note as hand-edited.
 
 **Organise** — notes and spaces are stored on-device (`notes.json`, `spaces.json`; audio as WAV under
 `bursts/`). A space can run lenses — Insight, Brainstorm, Reading, Actions, Tensions, Timeline, plus

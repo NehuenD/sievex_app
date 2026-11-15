@@ -90,10 +90,12 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.sievex.app.CaptureLog
 import com.sievex.app.CaptureService
+import com.sievex.app.Formats
 import com.sievex.app.LensArtifact
 import com.sievex.app.LensService
 import com.sievex.app.LensSpec
 import com.sievex.app.LensStore
+import com.sievex.app.NoteFormat
 import com.sievex.app.NoteStore
 import com.sievex.app.Pipeline
 import com.sievex.app.PipelineStage
@@ -102,7 +104,10 @@ import com.sievex.app.SpaceStore
 import com.sievex.app.StoredNote
 import com.sievex.app.asr.ModelInstaller
 import com.sievex.app.llm.Lens
+import com.sievex.app.llm.Transform
 import com.sievex.app.llm.TransformModel
+import java.util.Date
+import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
@@ -128,7 +133,11 @@ data class NoteItem(
      * When the user last rewrote this note by hand, or null if they never have. Only the editor
      * sets it, so it doubles as the "this is the user's own wording now" badge.
      */
-    val editedAt: Long? = null
+    val editedAt: Long? = null,
+    /** How the note was shaped; see [NoteFormat]. Mirrors the stored id, never re-derived. */
+    val format: String = NoteFormat.NOTE.id,
+    /** The bullet or step list a LIST/STEPS note carries; empty for every other format. */
+    val items: List<String> = emptyList()
 )
 
 private val demoNotes = listOf(
@@ -215,7 +224,9 @@ private fun readSnapshot(): UiSnapshot {
                 question = n.question,
                 tags = n.tags,
                 spaceId = n.spaceId,
-                editedAt = n.editedAt
+                editedAt = n.editedAt,
+                format = n.format,
+                items = n.items
             )
         },
         spaces = allSpaces,
@@ -286,6 +297,8 @@ fun SievexApp(
     var deletingSpace by remember { mutableStateOf<Space?>(null) }
     /** The note whose editor is open, if any. The editor sits on top of the note detail. */
     var editingNoteId by remember { mutableStateOf<Long?>(null) }
+    /** The hand-written note composer is open. It owns the whole screen while it is. */
+    var composingNote by remember { mutableStateOf(false) }
     /** Advances once per poll tick so screens reading non-observable state can recompose. */
     var tick by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -322,6 +335,9 @@ fun SievexApp(
         withContext(Dispatchers.IO) { NoteStore.init(context.filesDir) }
         ModelInstaller.refresh(context)
         TransformModel.refresh(context)
+        // The picker is persisted for podcast-triggered bursts; the UI is the first screen that
+        // can restore it before the user sees a stale Note selection.
+        Formats.restore(context)
     }
 
     // The poll must not run while the activity is stopped; otherwise it burns battery and
@@ -432,6 +448,23 @@ fun SievexApp(
     }
 
     val openNote = notes.firstOrNull { it.id == openNoteId }
+    if (composingNote) {
+        // Before note detail and the tab scaffold, so the composer is the only thing on screen;
+        // the editor branch above still wins if a note is already open for editing.
+        NewNoteScreen(
+            spaces = spaces,
+            initialSpaceId = currentSpaceId,
+            onCancel = { composingNote = false },
+            onSaved = {
+                composingNote = false
+                // The note exists on disk now; land on Notes and read it back immediately rather
+                // than waiting for the next poll tick.
+                tab = 2
+                scope.launch { applySnapshot(withContext(Dispatchers.IO) { readSnapshot() }) }
+            }
+        )
+        return
+    }
     if (openNote != null) {
         NoteDetailScreen(
             note = openNote,
@@ -489,7 +522,10 @@ fun SievexApp(
                 0 -> RecordScreen(
                     armed = armed,
                     recording = recording,
-                    modelsReady = ModelInstaller.installed && TransformModel.installed,
+                    // Plain never calls the transform model, so a missing LLM must not block a
+                    // quick dictated note.
+                    modelsReady = ModelInstaller.installed &&
+                        (TransformModel.installed || Formats.next == NoteFormat.PLAIN),
                     onToggle = {
                         val busy = Pipeline.stage == PipelineStage.TRANSCRIBING ||
                             Pipeline.stage == PipelineStage.TRANSFORMING
@@ -559,7 +595,8 @@ fun SievexApp(
                     onStop = { CaptureService.trigger(false, "stop") },
                     onNotifAccess = {
                         context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                    }
+                    },
+                    onNewNote = { composingNote = true }
                 ) { openNoteId = it.id }
                 3 -> ActionsScreen(notes.filter { it.mode == "Action" })
                 4 -> SettingsScreen(armed, recording, tick)
@@ -826,14 +863,18 @@ private fun NoteCard(note: NoteItem, onClick: () -> Unit) {
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                note.oneLine,
-                style = MaterialTheme.typography.bodySmall,
-                color = Ink2,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            // Plain notes and list notes with no summary have nothing to put here; an empty Text
+            // would still take a line of height.
+            if (note.oneLine.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    note.oneLine,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Ink2,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -985,18 +1026,31 @@ private fun RecordScreen(
         )
 
         if (!modelsReady) {
-            if (!ModelInstaller.installed) ModelSetupCard()
-            if (!TransformModel.installed) {
-                Spacer(Modifier.height(12.dp))
-                TransformSetupCard()
+            // Scrollable: the two setup cards plus the picker can exceed a short screen, and a
+            // clipped picker is the one control that would make Plain unreachable.
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                if (!ModelInstaller.installed) ModelSetupCard()
+                if (!TransformModel.installed) {
+                    Spacer(Modifier.height(12.dp))
+                    TransformSetupCard()
+                }
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "The speech model is always needed. Shaping a Note, List or Steps also needs " +
+                        "the transform model; Plain does not.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Ink2,
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
+                Spacer(Modifier.height(16.dp))
+                FormatPicker()
+                Spacer(Modifier.height(24.dp))
             }
-            Spacer(Modifier.height(16.dp))
-            Text(
-                "Both models are needed before recording. After they land, everything runs on-device.",
-                style = MaterialTheme.typography.bodySmall,
-                color = Ink2,
-                modifier = Modifier.padding(horizontal = 20.dp)
-            )
             return@Column
         }
 
@@ -1044,7 +1098,7 @@ private fun RecordScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = Ink2
                     )
-                    Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(14.dp))
                     Surface(
                         color = if (armed) SignalSoft else Surface2,
                         shape = RoundedCornerShape(999.dp),
@@ -1059,6 +1113,10 @@ private fun RecordScreen(
                     }
                 }
             }
+            // The format applies to the next capture, so it stays reachable while a note is being
+            // transcribed or shaped, and while a failure waits to be dismissed.
+            Spacer(Modifier.height(14.dp))
+            FormatPicker()
             Spacer(Modifier.height(16.dp))
             SpaceChip(spaceName, onPickSpace)
             Spacer(Modifier.height(28.dp))
@@ -1207,6 +1265,7 @@ private fun NotesScreen(
     onRecord: () -> Unit,
     onStop: () -> Unit,
     onNotifAccess: () -> Unit,
+    onNewNote: () -> Unit,
     onOpen: (NoteItem) -> Unit
 ) {
     LazyColumn(
@@ -1217,7 +1276,21 @@ private fun NotesScreen(
     ) {
         item {
             Column {
-                ScreenHeader("Notes", notes.size.toString() + " captured · walking mode")
+                ScreenHeader(
+                    "Notes",
+                    if (notes.size == 1) "1 note" else "${notes.size} notes"
+                )
+                // Part of the header copy, not a bar above the list: writing a note is the same
+                // kind of act as capturing one, so it sits with the title it belongs to.
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    PillButton("New note", Signal, Color.White, onNewNote)
+                }
+                Spacer(Modifier.height(12.dp))
                 CaptureCard(
                     armed = armed,
                     recording = recording,
@@ -1299,6 +1372,58 @@ private fun SubTab(label: String, selected: Boolean, onClick: () -> Unit) {
             style = MaterialTheme.typography.labelMedium,
             color = if (selected) Signal else Ink2,
             modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp)
+        )
+    }
+}
+
+/**
+ * One chip per [NoteFormat], scrolling sideways so four of them fit a narrow screen.
+ *
+ * [horizontalPadding] is applied inside the scroll: the chips line up with the 20dp gutter at
+ * rest, then scroll under it instead of being clipped at the edge.
+ */
+@Composable
+private fun FormatChips(
+    selected: NoteFormat,
+    onSelect: (NoteFormat) -> Unit,
+    horizontalPadding: Dp = 0.dp
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = horizontalPadding),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        NoteFormat.entries.forEach { format ->
+            SubTab(format.label, format == selected) { onSelect(format) }
+        }
+    }
+}
+
+/**
+ * The shape the next capture is filed in: one label and one chip row, deliberately compact
+ * because it shares the bottom of the screen with a 320 dp record button. The choice is
+ * persisted by [Formats] so a podcast-triggered burst after a process death still uses it.
+ * The longer blurbs live in the composer and the reprocess dialog, where there is room.
+ */
+@Composable
+private fun FormatPicker() {
+    val context = LocalContext.current
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            "FORMAT",
+            style = MaterialTheme.typography.labelSmall,
+            color = Ink2,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+        )
+        Spacer(Modifier.height(4.dp))
+        FormatChips(
+            Formats.next,
+            { format -> Formats.select(context, format) },
+            horizontalPadding = 20.dp
         )
     }
 }
@@ -2445,8 +2570,62 @@ private fun NoteDetailScreen(
     onEdit: () -> Unit
 ) {
     var picking by remember { mutableStateOf(false) }
+    /** The reprocess dialog is open. Separate from [reanalyzing], which is the model run. */
+    var reprocessing by remember(note.id) { mutableStateOf(false) }
+    var reanalyzing by remember(note.id) { mutableStateOf(false) }
+    var reanalyzeFailed by remember(note.id) { mutableStateOf(false) }
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val spaceName = spaces.firstOrNull { it.id == note.spaceId }?.name
+    val noteFormat = NoteFormat.from(note.format)
+
+    /**
+     * Reruns one format over the words already stored. Only the model's fields are replaced, so
+     * the user's text, the recording and the space survive; the app-level poll re-reads the note,
+     * which is why nothing here has to mirror the result back into state.
+     */
+    fun reprocess(chosen: NoteFormat) {
+        if (reanalyzing) return
+        // Start from the stored note, not the mirror: the poll may be a few hundred ms behind, and
+        // the words the run is based on have to be the words on disk.
+        val started = NoteStore.byId(note.id) ?: return
+        val startedVerbatim = started.verbatim
+        val startedEditedAt = started.editedAt
+        reprocessing = false
+        reanalyzeFailed = false
+        reanalyzing = true
+        scope.launch(Dispatchers.IO) {
+            val fields = Transform.apply(context.filesDir, startedVerbatim, chosen)
+            if (fields != null) {
+                val stored = NoteStore.byId(note.id)
+                if (stored != null &&
+                    (stored.verbatim != startedVerbatim || stored.editedAt != startedEditedAt)
+                ) {
+                    // The user rewrote the note while the pass was running: their edit wins, and
+                    // overwriting it with fields derived from older words would be a silent lie.
+                    CaptureLog.add("notes: reanalysis skipped, note changed while it ran")
+                } else if (stored != null) {
+                    NoteStore.replaceWithAi(
+                        stored.copy(
+                            title = fields.title,
+                            oneLine = fields.oneLine,
+                            mode = fields.mode,
+                            verbatim = stored.verbatim,
+                            why = fields.why,
+                            question = fields.question,
+                            tags = fields.tags,
+                            items = fields.items,
+                            format = chosen.id
+                        )
+                    )
+                }
+            }
+            withContext(Dispatchers.Main) {
+                reanalyzing = false
+                reanalyzeFailed = fields == null
+            }
+        }
+    }
 
     LazyColumn(
         Modifier
@@ -2471,7 +2650,44 @@ private fun NoteDetailScreen(
                 Spacer(Modifier.width(6.dp))
                 Text("NOTE", style = MaterialTheme.typography.labelSmall, color = Ink2)
                 Spacer(Modifier.weight(1f))
+                // Nothing to reprocess when there are no words: a note can only be re-shaped
+                // from what was said, not from fields a previous run produced.
+                PillButton(
+                    "Reanalyze",
+                    Surface2,
+                    Ink,
+                    { reprocessing = true },
+                    enabled = note.verbatim.isNotBlank() && !reanalyzing
+                )
+                Spacer(Modifier.width(8.dp))
                 PillButton("Edit", Surface2, Ink, onEdit)
+            }
+        }
+        if (reanalyzing || reanalyzeFailed) {
+            item {
+                Column(Modifier.padding(horizontal = 20.dp)) {
+                    if (reanalyzing) {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = Signal,
+                            trackColor = Line
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Reprocessing on-device…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Ink2
+                        )
+                    }
+                    if (reanalyzeFailed) {
+                        Text(
+                            "Could not reprocess this note. Try again from Settings if the " +
+                                "model is missing.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Red
+                        )
+                    }
+                }
             }
         }
         item {
@@ -2487,8 +2703,35 @@ private fun NoteDetailScreen(
                 }
                 Spacer(Modifier.height(14.dp))
                 Text(note.title, style = MaterialTheme.typography.headlineMedium, color = Ink)
-                Spacer(Modifier.height(10.dp))
-                Text(note.oneLine, style = MaterialTheme.typography.bodyLarge, color = Ink2)
+                // Plain and list notes have no one-liner of their own; the empty line would just
+                // add a gap under the title.
+                if (note.oneLine.isNotBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(note.oneLine, style = MaterialTheme.typography.bodyLarge, color = Ink2)
+                }
+            }
+        }
+        if (note.items.isNotEmpty()) {
+            item {
+                DetailSection(if (noteFormat.ordered) "STEPS" else "ITEMS") {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        note.items.forEachIndexed { index, item ->
+                            Row {
+                                Text(
+                                    if (noteFormat.ordered) "${index + 1}" else "•",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Signal,
+                                    modifier = Modifier.width(22.dp)
+                                )
+                                Text(
+                                    item,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Ink
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
         item {
@@ -2579,6 +2822,60 @@ private fun NoteDetailScreen(
             onDismiss = { picking = false }
         )
     }
+
+    if (reprocessing) {
+        ReprocessDialog(
+            initialFormat = noteFormat,
+            onReprocess = { chosen -> reprocess(chosen) },
+            onDismiss = { reprocessing = false }
+        )
+    }
+}
+
+/**
+ * Asks which shape to reprocess a note into. It defaults to the note's current format, because
+ * "try that again" is the common case and changing the shape is the exception.
+ */
+@Composable
+private fun ReprocessDialog(
+    initialFormat: NoteFormat,
+    onReprocess: (NoteFormat) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var chosen by remember { mutableStateOf(initialFormat) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            color = Surface1,
+            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.padding(20.dp)) {
+                Text("Reprocess this note", style = MaterialTheme.typography.titleMedium, color = Ink)
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "This reruns the chosen format over your words and replaces the title, " +
+                        "summary, insight and tags. Your text is untouched.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Ink2
+                )
+                Spacer(Modifier.height(14.dp))
+                FormatChips(chosen, { chosen = it })
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    chosen.blurb,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Ink2
+                )
+                Spacer(Modifier.height(18.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    PillButton("Cancel", Surface2, Ink2, onDismiss)
+                    Spacer(Modifier.width(10.dp))
+                    PillButton("Reprocess", Signal, Color.White, { onReprocess(chosen) })
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -2600,9 +2897,14 @@ private fun DetailSection(label: String, body: @Composable () -> Unit) {
 
 // --------------------------------------------------------------------------- note editing
 
-/** The six modes a note can be filed under, in the order the editor's chip row shows them. */
+/**
+ * The modes a note can be filed under, in the order the editor's chip row shows them.
+ *
+ * "Note" is last and is the mode a plain or list note carries: it is not an intent, so it stays
+ * out of the way rather than sitting at the front of the row.
+ */
 private val noteModes =
-    listOf("Insight", "Idea", "Action", "Reference", "Question", "Reflection")
+    listOf("Insight", "Idea", "Action", "Reference", "Question", "Reflection", "Note")
 
 /**
  * Full-screen note editor: the only screen in the app that rewrites note content.
@@ -2625,6 +2927,14 @@ private fun NoteEditorScreen(
     var question by remember(note.id) { mutableStateOf(note.question) }
     var tagsText by remember(note.id) { mutableStateOf(note.tags.joinToString(", ")) }
     var mode by remember(note.id) { mutableStateOf(note.mode) }
+    // One item per line: the stored list round-trips through this text unchanged.
+    var itemsText by remember(note.id) { mutableStateOf(note.items.joinToString("\n")) }
+
+    val noteFormat = NoteFormat.from(note.format)
+    val showsItems = noteFormat == NoteFormat.LIST || noteFormat == NoteFormat.STEPS
+    val editedItems = remember(itemsText) {
+        itemsText.lines().map { it.trim() }.filter { it.isNotEmpty() }
+    }
 
     val tags = remember(tagsText) {
         tagsText.split(",")
@@ -2676,7 +2986,11 @@ private fun NoteEditorScreen(
                             // and edit stamp, so the editor never has to carry them.
                             audioPath = null,
                             spaceId = note.spaceId,
-                            editedAt = null
+                            editedAt = null,
+                            // The format is not editable here: reanalyzing is what changes the
+                            // shape, and that path owns the prompt as well as the fields.
+                            format = note.format,
+                            items = editedItems
                         )
                     )
                 }
@@ -2691,6 +3005,19 @@ private fun NoteEditorScreen(
                 .padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            Column {
+                Text(
+                    "FORMAT · " + noteFormat.label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Ink2
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Change the format by reprocessing this note.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Ink2
+                )
+            }
             EditorField("TITLE", title, "What this note is about", { title = it }, singleLine = true)
             EditorField(
                 "ONE LINE",
@@ -2699,6 +3026,15 @@ private fun NoteEditorScreen(
                 { oneLine = it },
                 minHeight = 46.dp
             )
+            if (showsItems) {
+                EditorField(
+                    "ITEMS",
+                    itemsText,
+                    "One item per line",
+                    { itemsText = it },
+                    minHeight = 120.dp
+                )
+            }
             EditorField(
                 "WHAT I SAID",
                 verbatim,
@@ -2797,6 +3133,261 @@ private fun EditorField(
                     .heightIn(min = minHeight)
             )
         }
+    }
+}
+
+// --------------------------------------------------------------------------- new note
+
+private val wordGap = Regex("\\s+")
+
+/** A title for a note nobody titled: the opening words of what was typed. */
+private fun derivedTitle(text: String): String {
+    val words = text.trim()
+        .split(wordGap)
+        .filter { it.isNotEmpty() }
+        .take(8)
+        .joinToString(" ")
+    return words.trimEnd('.', ',', ';', ':').ifBlank { "Untitled note" }
+}
+
+/**
+ * Writes a note by hand instead of by voice.
+ *
+ * The typed text is the record: whatever the model does or fails to do, it ends up as
+ * [StoredNote.verbatim], so a failed shaping still saves the words the user wrote rather than
+ * losing them. Shaping is forced off when there is nothing to shape with — no model, or a
+ * [NoteFormat.PLAIN] note, which exists precisely to keep the words untouched.
+ */
+@Composable
+private fun NewNoteScreen(
+    spaces: List<Space>,
+    initialSpaceId: String?,
+    onCancel: () -> Unit,
+    onSaved: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var text by remember { mutableStateOf("") }
+    var titleInput by remember { mutableStateOf("") }
+    var selectedSpaceId by remember { mutableStateOf(initialSpaceId) }
+    // Starts on the format the next capture would use; the chips below are the same four.
+    var format by remember { mutableStateOf(Formats.next) }
+    var useAi by remember { mutableStateOf(TransformModel.installed) }
+    var saving by remember { mutableStateOf(false) }
+    // Read from state when saving starts, not from the chips: changing a chip mid-save must not
+    // relabel work that is already running.
+    var savingWithAi by remember { mutableStateOf(false) }
+    var pickingSpace by remember { mutableStateOf(false) }
+
+    val aiAvailable = TransformModel.installed && format.usesLlm
+    val aiOn = useAi && aiAvailable
+    val canSave = text.isNotBlank() && !saving
+    val spaceName = spaces.firstOrNull { it.id == selectedSpaceId }?.name
+
+    fun save() {
+        if (saving || text.isBlank()) return
+        val typed = text
+        val typedTitle = titleInput.trim()
+        val chosen = format
+        // Whether the shape was *asked for* decides the fallback, not whether the model happened
+        // to be present: a List note with AI off must not be saved as a list with no items.
+        val shapeRequested = chosen.usesLlm
+        val shape = shapeRequested && useAi && TransformModel.installed
+        savingWithAi = shape
+        saving = true
+        // Both the model call and the notes.json write are blocking: one IO hop, then back to
+        // main only to tell the caller the note is on disk.
+        scope.launch(Dispatchers.IO) {
+            val fields = if (shape) Transform.apply(context.filesDir, typed, chosen) else null
+            if (shape && fields == null) {
+                CaptureLog.add("notes: shaping failed, saved the typed text as written")
+            }
+            NoteStore.add(
+                StoredNote(
+                    id = NoteStore.nextId(),
+                    // A title the user typed is theirs; the model's is only a fallback for a
+                    // blank one, and the words themselves are the last resort.
+                    title = typedTitle.ifBlank {
+                        fields?.title?.takeIf { it.isNotBlank() } ?: derivedTitle(typed)
+                    },
+                    oneLine = fields?.oneLine ?: "",
+                    mode = fields?.mode ?: "Note",
+                    whenText = "Today " + SimpleDateFormat("HH:mm", Locale.US).format(Date()),
+                    verbatim = typed.trim(),
+                    why = fields?.why ?: "",
+                    question = fields?.question ?: "",
+                    tags = fields?.tags ?: emptyList(),
+                    audioPath = null,
+                    spaceId = selectedSpaceId,
+                    // Shaping that failed leaves a plain note, not a list-shaped note with no
+                    // items: the format label should say what the note actually is.
+                    format = if (shapeRequested && fields == null) NoteFormat.PLAIN.id else chosen.id,
+                    items = fields?.items ?: emptyList()
+                )
+            )
+            withContext(Dispatchers.Main) { onSaved() }
+        }
+    }
+
+    // A half-written note must not be orphaned by the system back gesture either.
+    BackHandler { if (!saving) onCancel() }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Canvas)
+    ) {
+        Row(
+            Modifier.padding(start = 12.dp, end = 20.dp, top = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Filled.ArrowBack,
+                contentDescription = "Cancel",
+                tint = if (saving) Ink2 else Ink,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clickable(enabled = !saving) { onCancel() }
+                    .padding(8.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text("NEW NOTE", style = MaterialTheme.typography.labelSmall, color = Ink2)
+            Spacer(Modifier.weight(1f))
+            PillButton("Cancel", Surface2, Ink2, onCancel, enabled = !saving)
+            Spacer(Modifier.width(8.dp))
+            PillButton(
+                "Save",
+                if (canSave) Signal else Surface2,
+                if (canSave) Color.White else Ink2,
+                { save() },
+                enabled = canSave
+            )
+        }
+
+        if (saving) {
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Signal,
+                    trackColor = Line
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    if (savingWithAi) "Shaping the note…" else "Saving…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Ink2
+                )
+            }
+        }
+
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            EditorField(
+                "TEXT",
+                text,
+                "What you want to keep",
+                { text = it },
+                minHeight = 130.dp
+            )
+            EditorField(
+                "TITLE",
+                titleInput,
+                "Optional: used exactly as written",
+                { titleInput = it },
+                singleLine = true
+            )
+            Column {
+                Text("SPACE", style = MaterialTheme.typography.labelSmall, color = Ink2)
+                Spacer(Modifier.height(8.dp))
+                Surface(
+                    color = Surface1,
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(
+                            1.dp,
+                            if (selectedSpaceId == null) Line else Signal.copy(alpha = 0.45f),
+                            RoundedCornerShape(20.dp)
+                        )
+                        .clickable(enabled = !saving) { pickingSpace = true }
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            spaceName ?: "No space",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (spaceName == null) Ink2 else Signal,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text("Change", style = MaterialTheme.typography.labelSmall, color = Ink2)
+                    }
+                }
+            }
+            Column {
+                Text("FORMAT", style = MaterialTheme.typography.labelSmall, color = Ink2)
+                Spacer(Modifier.height(8.dp))
+                FormatChips(format, { format = it })
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    format.blurb,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Ink2
+                )
+            }
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Shape with AI",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Ink,
+                        modifier = Modifier.weight(1f)
+                    )
+                    SubTab("On", aiOn) { if (aiAvailable) useAi = true }
+                    Spacer(Modifier.width(8.dp))
+                    SubTab("Off", !aiOn) { useAi = false }
+                }
+                if (!format.usesLlm) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Plain keeps your words exactly as typed.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Ink2
+                    )
+                }
+                if (!TransformModel.installed && format.usesLlm) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "The transform model isn't installed, so this note is saved as plain " +
+                            "text. Add it in Settings to shape notes.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Ink2
+                    )
+                }
+            }
+        }
+    }
+
+    if (pickingSpace) {
+        SpacePickerDialog(
+            title = "File into space",
+            spaces = spaces,
+            selectedId = selectedSpaceId,
+            onSelect = { spaceId ->
+                pickingSpace = false
+                selectedSpaceId = spaceId
+            },
+            onDismiss = { pickingSpace = false }
+        )
     }
 }
 

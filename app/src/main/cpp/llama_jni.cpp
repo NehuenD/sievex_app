@@ -463,9 +463,11 @@ static jbyteArray complete_locked(
         }
         n_generated++;
 
-        // Field order is fixed by the grammar, so the keys are honest checkpoints.
+        // Field order is fixed by the grammar, so the keys are honest checkpoints. `one_line`
+        // belongs to a note and `items` to a list or steps; either one is the third phase.
         if (out.find("\"title\"") != std::string::npos) progress.emit(2);
         if (out.find("\"one_line\"") != std::string::npos) progress.emit(3);
+        if (out.find("\"items\"") != std::string::npos) progress.emit(3);
         if (out.find("\"why_it_matters\"") != std::string::npos) progress.emit(4);
         if (out.find("\"tags\"") != std::string::npos) progress.emit(5);
 

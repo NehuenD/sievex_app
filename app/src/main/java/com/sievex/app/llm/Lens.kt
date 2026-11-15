@@ -30,6 +30,7 @@ object Lens {
     private const val ONE_LINE_CHARS = 300
     private const val WHY_CHARS = 400
     private const val VERBATIM_CHARS = 400
+    private const val ITEMS_CHARS = 400
 
     /** The user's own framing of the space: enough to steer the report, not enough to dominate it. */
     private const val DESCRIPTION_CHARS = 300
@@ -195,6 +196,11 @@ object Lens {
 
         val oneLine = flat(note.oneLine, ONE_LINE_CHARS)
         if (oneLine.isNotEmpty()) append("one_line: ").append(oneLine).append('\n')
+
+        // A list note's one_line is only a count, so the actual items have to travel too.
+        if (note.items.isNotEmpty()) {
+            append("items: ").append(flat(note.items.joinToString("; "), ITEMS_CHARS)).append('\n')
+        }
 
         val why = flat(note.why, WHY_CHARS)
         if (why.isNotEmpty()) append("why: ").append(why).append('\n')

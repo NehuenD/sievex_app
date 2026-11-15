@@ -60,6 +60,13 @@ class CaptureService : Service() {
     @Volatile
     private var held = false
 
+    /**
+     * The format snapshotted when the current burst started. The picker stays tappable while
+     * recording, so reading `Formats.next` at queue time would reshape the burst being spoken.
+     */
+    @Volatile
+    private var burstFormat: String? = null
+
     /** Handler retries are posted here so they survive the worker thread finishing a drain. */
     private val mainHandler: Handler by lazy { Handler(Looper.getMainLooper()) }
     private val retryRunnable = Runnable { processNext() }
@@ -67,6 +74,9 @@ class CaptureService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // A podcast-triggered burst can arrive after a process death, before any screen has
+        // restored the picker: read the persisted choice before a job can be created.
+        Formats.restore(this)
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL, "Capture", NotificationManager.IMPORTANCE_LOW)
@@ -172,7 +182,11 @@ class CaptureService : Service() {
         if (asrWarm) warm++
 
         val model = TransformModel.modelFile(filesDir)
-        if (model.isFile && model.length() > 0L) {
+        // A Plain burst never calls the model, so warming 1.1 GB for it only competes with the
+        // speech encoder for memory. Anything already queued that does need shaping keeps it warm.
+        val needsLlm = Formats.next.usesLlm ||
+            JobQueue.all().any { NoteFormat.from(it.format).usesLlm }
+        if (needsLlm && model.isFile && model.length() > 0L) {
             val llmWarm = runCatching {
                 // The native handle is single-session, so the load goes through the same gate
                 // every completion uses.
@@ -258,6 +272,9 @@ class CaptureService : Service() {
         }
         val next = BurstRecorder(this) { file -> processBurst(file) }
         recorder = next
+        // Snapshot the shape now: the picker stays on screen while recording, and changing it must
+        // apply to the next burst, not the one being spoken.
+        burstFormat = Formats.next.id
         // Set before the capture thread starts: a recorder that dies on its first read invokes
         // onComplete() immediately, and processBurst() has to see the state stopBurst() leaves
         // behind, not a service that still believes it is recording.
@@ -271,6 +288,7 @@ class CaptureService : Service() {
             recording = false
             isRecording = false
             recorder = null
+            burstFormat = null
             CaptureLog.add("burst failed to start ($why)")
             return
         }
@@ -342,9 +360,13 @@ class CaptureService : Service() {
             id = UUID.randomUUID().toString(),
             wavPath = file.absolutePath,
             spaceId = SpaceStore.currentSpaceId,
-            attempts = 0
+            attempts = 0,
+            // Read now, not when the job drains: the user may change the format for the next
+            // burst while this one is still queued.
+            format = burstFormat ?: Formats.next.id
         )
         JobQueue.add(job)
+        burstFormat = null
         CaptureLog.add("queued ${file.name}${job.spaceId?.let { " into $it" } ?: ""}")
         processNext()
     }
@@ -517,10 +539,13 @@ class CaptureService : Service() {
             return true
         }
 
-        Pipeline.transforming()
+        val format = NoteFormat.from(job.format)
+        Pipeline.transforming(format)
         val time = SimpleDateFormat("HH:mm", Locale.US).format(Date())
         val whenText = "Today $time"
-        val structured = Transform.apply(filesDir, text) { phase -> Pipeline.transformingStep(phase) }
+        val structured = Transform.apply(filesDir, text, format) { phase ->
+            Pipeline.transformingStep(phase)
+        }
 
         // The space could have been deleted while this burst sat in the queue.
         val spaceId = job.spaceId?.takeIf { id -> SpaceStore.all().any { it.id == id } }
@@ -538,7 +563,9 @@ class CaptureService : Service() {
                 question = structured.question,
                 tags = structured.tags,
                 audioPath = file.absolutePath,
-                spaceId = spaceId
+                spaceId = spaceId,
+                format = format.id,
+                items = structured.items
             )
         } else {
             val words = text.split(Regex("\\s+")).filter { it.isNotBlank() }
@@ -547,15 +574,17 @@ class CaptureService : Service() {
             StoredNote(
                 id = NoteStore.nextId(),
                 title = title.ifBlank { "Untitled note" },
-                oneLine = text,
-                mode = "Insight",
+                oneLine = "",
+                mode = "Note",
                 whenText = whenText,
                 verbatim = text,
                 why = "",
                 question = "",
                 tags = emptyList(),
                 audioPath = file.absolutePath,
-                spaceId = spaceId
+                spaceId = spaceId,
+                // The format could not be applied, so the note is honestly plain.
+                format = NoteFormat.PLAIN.id
             )
         }
 
@@ -657,7 +686,10 @@ class CaptureService : Service() {
                     id = UUID.randomUUID().toString(),
                     wavPath = wav.absolutePath,
                     spaceId = SpaceStore.currentSpaceId,
-                    attempts = 0
+                    attempts = 0,
+                    // The burst's own choice died with its process; the persisted picker is the
+                    // closest honest guess.
+                    format = Formats.next.id
                 )
             )
             CaptureLog.add("recovered orphan ${wav.name}")

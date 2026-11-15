@@ -11,6 +11,7 @@ enum class PipelineStage { IDLE, TRANSCRIBING, TRANSFORMING, DONE, FAILED }
  *
  * [step] is the action inside the transform, reported by the native decode loop as the JSON
  * fields appear, so the status card can name what the phone is doing instead of naming a model.
+ * The label depends on the format: a list is "extracting items", a note is "writing the summary".
  * Kept in memory only: it describes the current burst, not history.
  */
 object Pipeline {
@@ -36,6 +37,9 @@ object Pipeline {
     var blocked by mutableStateOf(false)
         private set
 
+    /** The format being shaped, so phase numbers map to the right words. */
+    private var stepFormat = NoteFormat.NOTE
+
     fun transcribing() {
         stage = PipelineStage.TRANSCRIBING
         detail = ""
@@ -43,10 +47,11 @@ object Pipeline {
         blocked = false
     }
 
-    fun transforming() {
+    fun transforming(format: NoteFormat = NoteFormat.NOTE) {
         stage = PipelineStage.TRANSFORMING
         detail = ""
-        step = "Understanding intent"
+        stepFormat = format
+        step = labelFor(format, 1) ?: "Understanding intent"
         blocked = false
     }
 
@@ -56,7 +61,7 @@ object Pipeline {
      */
     fun transformingStep(phase: Int) {
         stage = PipelineStage.TRANSFORMING
-        STEP_LABELS[phase]?.let { step = it }
+        labelFor(stepFormat, phase)?.let { step = it }
     }
 
     fun done(title: String) {
@@ -94,14 +99,23 @@ object Pipeline {
     }
 
     /**
-     * Phase numbers come from `LlamaBridge.TransformProgress`: 1 is the start of generation,
-     * then the grammar-pinned field keys (`title`, `one_line`, `why_it_matters`, `tags`).
+     * Phase numbers come from `LlamaBridge.TransformProgress`: 1 is the start of generation, then
+     * the grammar-pinned field keys (`title`, `one_line` or `items`, `why_it_matters`, `tags`).
      */
-    private val STEP_LABELS = mapOf(
-        1 to "Understanding intent",
-        2 to "Crafting title",
-        3 to "Writing the summary",
-        4 to "Creating insights",
-        5 to "Adding tags"
-    )
+    private fun labelFor(format: NoteFormat, phase: Int): String? = when (phase) {
+        1 -> when (format) {
+            NoteFormat.LIST, NoteFormat.STEPS -> "Understanding the dictation"
+            NoteFormat.PLAIN -> "Saving the note"
+            else -> "Understanding intent"
+        }
+        2 -> "Crafting title"
+        3 -> when (format) {
+            NoteFormat.LIST -> "Extracting items"
+            NoteFormat.STEPS -> "Ordering the steps"
+            else -> "Writing the summary"
+        }
+        4 -> "Creating insights"
+        5 -> "Adding tags"
+        else -> null
+    }
 }

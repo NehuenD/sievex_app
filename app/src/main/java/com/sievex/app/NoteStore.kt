@@ -23,7 +23,11 @@ data class StoredNote(
      * [NoteStore.update] may set it, so its presence means "this note is the user's words now",
      * which is what the editor badge reads.
      */
-    val editedAt: Long? = null
+    val editedAt: Long? = null,
+    /** How the note was shaped; see [NoteFormat]. Defaults keep older files readable. */
+    val format: String = NoteFormat.NOTE.id,
+    /** The bullet or step list a LIST/STEPS note carries; empty for every other format. */
+    val items: List<String> = emptyList()
 )
 
 /** Flat JSON persistence. Enough until the Markdown filing layer lands. */
@@ -124,8 +128,24 @@ object NoteStore {
      * Returns the note as saved, or null when [note]'s id is not in the store.
      */
     @Synchronized
-    fun update(note: StoredNote): StoredNote? {
-        val i = notes.indexOfFirst { it.id == note.id }
+    fun update(note: StoredNote): StoredNote? = write(note, markEdited = true)
+
+    /**
+     * Replaces the AI-shaped content of a note without pretending the user edited it.
+     *
+     * Used by reanalysis: the title, summary, insight and tags are the model's work, so stamping
+     * [StoredNote.editedAt] would light up the "your words now" badge for text nobody wrote. The
+     * stored stamp (and the audio, the space and the id) is kept as it was.
+     */
+    fun replaceWithAi(note: StoredNote): StoredNote? = write(note, markEdited = false)
+
+    /**
+     * The one writer of note content. Synchronised because reanalysis runs on an IO thread while
+     * the UI poll reads [all] and the queue worker may [add]: without the monitor, `save()` could
+     * iterate the list while it is being replaced.
+     */
+    @Synchronized
+    private fun write(note: StoredNote, markEdited: Boolean): StoredNote? {        val i = notes.indexOfFirst { it.id == note.id }
         if (i < 0) {
             CaptureLog.add("notes: update, unknown note ${note.id}")
             return null
@@ -134,7 +154,7 @@ object NoteStore {
         val edited = note.copy(
             audioPath = existing.audioPath,
             spaceId = existing.spaceId,
-            editedAt = System.currentTimeMillis()
+            editedAt = if (markEdited) System.currentTimeMillis() else existing.editedAt
         )
         notes[i] = edited
         save()
@@ -183,6 +203,9 @@ object NoteStore {
                 val tags = mutableListOf<String>()
                 val ta = o.optJSONArray("tags")
                 if (ta != null) for (j in 0 until ta.length()) tags.add(ta.getString(j))
+                val items = mutableListOf<String>()
+                val ia = o.optJSONArray("items")
+                if (ia != null) for (j in 0 until ia.length()) items.add(ia.getString(j))
                 loaded.add(
                     StoredNote(
                         id = o.optLong("id"),
@@ -198,7 +221,12 @@ object NoteStore {
                         spaceId = o.optString("spaceId").ifBlank { null },
                         // Files written before editing existed have no key at all; 0 is the
                         // on-disk spelling of "never edited", never a real timestamp.
-                        editedAt = o.optLong("editedAt", 0L).takeIf { it > 0L }
+                        editedAt = o.optLong("editedAt", 0L).takeIf { it > 0L },
+                        // Every note written before formats existed is a regular note.
+                        format = o.optString("format", NoteFormat.NOTE.id)
+                            .takeIf { NoteFormat.entries.any { f -> f.id == it } }
+                            ?: NoteFormat.NOTE.id,
+                        items = items
                     )
                 )
             }
@@ -253,6 +281,8 @@ object NoteStore {
                         put("spaceId", n.spaceId ?: "")
                         // 0 rather than JSON null: keeps the field numeric for every reader.
                         put("editedAt", n.editedAt ?: 0L)
+                        put("format", n.format)
+                        put("items", JSONArray(n.items))
                     }
                 )
             }

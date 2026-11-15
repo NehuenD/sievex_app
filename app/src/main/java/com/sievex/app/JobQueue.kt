@@ -9,7 +9,9 @@ data class Job(
     val id: String,
     val wavPath: String,
     val spaceId: String?,
-    val attempts: Int
+    val attempts: Int,
+    /** The format chosen when the burst started; jobs from older files default to a note. */
+    val format: String = NoteFormat.NOTE.id
 )
 
 /**
@@ -83,7 +85,10 @@ object JobQueue {
                         id = id,
                         wavPath = wav,
                         spaceId = if (spaceId.isBlank() || spaceId == "null") null else spaceId,
-                        attempts = o.optInt("attempts")
+                        attempts = o.optInt("attempts"),
+                        format = o.optString("format", NoteFormat.NOTE.id)
+                            .takeIf { candidate -> NoteFormat.entries.any { it.id == candidate } }
+                            ?: NoteFormat.NOTE.id
                     )
                 )
             }
@@ -102,6 +107,7 @@ object JobQueue {
                         put("wavPath", j.wavPath)
                         put("spaceId", j.spaceId ?: "")
                         put("attempts", j.attempts)
+                        put("format", j.format)
                     }
                 )
             }
