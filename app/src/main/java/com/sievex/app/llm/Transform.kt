@@ -73,12 +73,16 @@ ws ::= [ \t\n\r]*
 
     fun available(filesDir: File): Boolean = TransformModel.modelFile(filesDir).length() > 0
 
-    fun apply(filesDir: File, transcript: String): Fields? =
-        runCatching { LlmGate.exclusive { applyUnsafe(filesDir, transcript) } }
+    fun apply(filesDir: File, transcript: String, reportPhase: (Int) -> Unit = {}): Fields? =
+        runCatching { LlmGate.exclusive { applyUnsafe(filesDir, transcript, reportPhase) } }
             .onFailure { CaptureLog.add("llm: failed - ${it.message}") }
             .getOrNull()
 
-    private fun applyUnsafe(filesDir: File, transcript: String): Fields? {
+    private fun applyUnsafe(
+        filesDir: File,
+        transcript: String,
+        reportPhase: (Int) -> Unit
+    ): Fields? {
         val model = TransformModel.modelFile(filesDir)
         if (!model.exists() || model.length() == 0L) return null
         if (!LlamaBridge.nativeLoad(model.absolutePath)) {
@@ -86,13 +90,30 @@ ws ::= [ \t\n\r]*
             return null
         }
 
+        // A retry restarts the native phase counter at 1; the card must not run backwards.
+        var lastPhase = 0
         repeat(2) { attempt ->
             val prompt = buildPrompt(if (attempt == 0) transcript else retryTranscript(transcript))
             // Grammar on both attempts: a truncated object is still an object prefix, and free
             // sampling is the path least likely to close it. The retry buys headroom instead.
             val cap = if (attempt == 0) MAX_TOKENS else RETRY_TOKENS
             val started = System.currentTimeMillis()
-            val raw = LlamaBridge.complete(prompt, cap, grammar = GRAMMAR)
+            // An explicit object, not a SAM lambda: the native side resolves `onPhase(I)V` on the
+            // receiver's class, and an anonymous object is guaranteed to declare it.
+            val progress = object : LlamaBridge.TransformProgress {
+                override fun onPhase(phase: Int) {
+                    if (phase > lastPhase) {
+                        lastPhase = phase
+                        reportPhase(phase)
+                    }
+                }
+            }
+            val raw = LlamaBridge.complete(
+                prompt,
+                cap,
+                grammar = GRAMMAR,
+                progress = progress
+            )
             val ms = System.currentTimeMillis() - started
             CaptureLog.add(
                 "llm: attempt %d (%d tok cap) %d chars in %d ms"

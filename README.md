@@ -4,8 +4,8 @@ A personal Android app for capturing a thought by voice while your hands are bus
 (which the podcast app sees as its own pause), a 20–60 second burst, then a fully on-device pass
 that turns the audio into a structured Markdown note filed into a vault.
 
-No cloud, no accounts, no network permission. The only network use is the one-time, checksum-pinned
-model download.
+No cloud, no accounts. The only network use is the one-time, checksum-pinned model download; after
+that the app is fully offline and nothing you record leaves the phone.
 
 ## Pipeline
 
@@ -20,6 +20,11 @@ earbud tap → CaptureService (armed foreground service, mic closed until a burs
 
 Everything runs on one queue worker, in capture order. ASR and the LLM are serialised on purpose:
 a phone that keeps both resident and runs them at once has no thermal headroom left.
+
+Two things run outside that queue: the first-run intro (shown once, stored in
+SharedPreferences), and lens reports over a space. A report can take a minute on a large space, so
+it runs in a `dataSync` foreground service and posts a notification when the report is ready —
+leaving the screen, locking the phone or closing the app does not cancel it.
 
 ## Stack
 

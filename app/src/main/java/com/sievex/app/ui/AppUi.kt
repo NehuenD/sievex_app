@@ -3,6 +3,7 @@ package com.sievex.app.ui
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -90,6 +91,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.sievex.app.CaptureLog
 import com.sievex.app.CaptureService
 import com.sievex.app.LensArtifact
+import com.sievex.app.LensService
 import com.sievex.app.LensSpec
 import com.sievex.app.LensStore
 import com.sievex.app.NoteStore
@@ -99,8 +101,8 @@ import com.sievex.app.Space
 import com.sievex.app.SpaceStore
 import com.sievex.app.StoredNote
 import com.sievex.app.asr.ModelInstaller
-import com.sievex.app.llm.Lens
 import com.sievex.app.llm.TransformModel
+import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -232,11 +234,44 @@ private fun modeColor(mode: String): Color = when (mode) {
 }
 
 @Composable
-fun SievexApp() {
+fun SievexApp(
+    initialSpaceId: String? = null,
+    initialLensId: String? = null,
+    onInitialSpaceConsumed: () -> Unit = {}
+) {
     var tab by remember { mutableStateOf(0) }
     var openNoteId by remember { mutableStateOf<Long?>(null) }
     var openSpaceId by remember { mutableStateOf<String?>(null) }
+    /** The lens a report notification asked to open, consumed by the space screen. */
+    var openSpaceLensId by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+
+    // First run: say what the app is before showing the recorder. The flag is written only when
+    // the intro finishes or is skipped, so a process death mid-onboarding shows it again.
+    var onboarded by remember { mutableStateOf(OnboardingPrefs.done(context)) }
+    if (!onboarded) {
+        OnboardingScreen(onDone = {
+            OnboardingPrefs.markDone(context)
+            onboarded = true
+        })
+        return
+    }
+
+    // The microphone is requested when capture is armed (below); notifications are requested here,
+    // once the user has seen what the app does. A refusal only costs the "report ready" ping: the
+    // report itself is still generated and saved.
+    val notifyPerm = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notifyPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     var armed by remember { mutableStateOf(CaptureService.armed) }
     var recording by remember { mutableStateOf(CaptureService.isRecording) }
     var notes by remember { mutableStateOf<List<NoteItem>>(emptyList()) }
@@ -254,12 +289,20 @@ fun SievexApp() {
     var tick by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
 
+    /**
+     * What to do once the microphone permission lands. The launcher's callback cannot tell which
+     * button asked, so the action is remembered here: without it the first tap on the record
+     * button would arm the podcast trigger instead of starting a burst.
+     */
+    var pendingAudioAction by remember { mutableStateOf<String?>(null) }
     val audioPerm = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) {
-            CaptureService.send(context, CaptureService.ACTION_ARM)
-        } else {
+        val action = pendingAudioAction
+        pendingAudioAction = null
+        if (granted && action != null) {
+            CaptureService.send(context, action, "after grant")
+        } else if (!granted) {
             CaptureLog.add("microphone permission denied")
         }
     }
@@ -320,9 +363,36 @@ fun SievexApp() {
         }
     }
 
+    // A completion notification opens the space (and the lens) it built. The stores load
+    // asynchronously, so wait for the space to appear before deciding it is gone; a deleted space
+    // just drops the request.
+    var pendingSpaceId by remember { mutableStateOf(initialSpaceId) }
+    var pendingLensId by remember { mutableStateOf(initialLensId) }
+    LaunchedEffect(initialSpaceId, initialLensId) {
+        if (initialSpaceId != null) {
+            pendingSpaceId = initialSpaceId
+            pendingLensId = initialLensId
+        }
+    }
+    LaunchedEffect(spaces, pendingSpaceId) {
+        val wanted = pendingSpaceId ?: return@LaunchedEffect
+        if (spaces.isEmpty()) return@LaunchedEffect
+        if (spaces.any { it.id == wanted }) {
+            // A notification tap must land on the space even when a note or the editor is open:
+            // those screens render before the tab scaffold and would otherwise swallow the jump.
+            editingNoteId = null
+            openNoteId = null
+            openSpaceLensId = pendingLensId
+            openSpaceId = wanted
+            tab = 1
+        }
+        pendingSpaceId = null
+        pendingLensId = null
+        onInitialSpaceConsumed()
+    }
+
     // One back stack, three levels: the editor sits on top of a note, which sits on top of a space.
-    BackHandler(enabled = editingNoteId != null || openNoteId != null || openSpaceId != null) {
-        when {
+    BackHandler(enabled = editingNoteId != null || openNoteId != null || openSpaceId != null) {        when {
             editingNoteId != null -> editingNoteId = null
             openNoteId != null -> openNoteId = null
             else -> openSpaceId = null
@@ -376,7 +446,11 @@ fun SievexApp() {
         SpaceScreen(
             space = openSpace,
             allNotes = notes,
-            onBack = { openSpaceId = null },
+            initialLensId = openSpaceLensId,
+            onBack = {
+                openSpaceId = null
+                openSpaceLensId = null
+            },
             onOpenNote = { openNoteId = it.id }
         )
         return
@@ -430,6 +504,7 @@ fun SievexApp() {
                             CaptureService.send(context, CaptureService.ACTION_START_BURST, "record screen")
                         } else {
                             Pipeline.reset()
+                            pendingAudioAction = CaptureService.ACTION_START_BURST
                             audioPerm.launch(Manifest.permission.RECORD_AUDIO)
                         }
                     },
@@ -440,6 +515,7 @@ fun SievexApp() {
                         ) {
                             CaptureService.send(context, CaptureService.ACTION_ARM)
                         } else {
+                            pendingAudioAction = CaptureService.ACTION_ARM
                             audioPerm.launch(Manifest.permission.RECORD_AUDIO)
                         }
                     },
@@ -456,7 +532,10 @@ fun SievexApp() {
                     noteCounts = noteCounts,
                     insights = insights,
                     onNewSpace = { namingNewSpace = true },
-                    onOpen = { openSpaceId = it.id },
+                    onOpen = {
+                        openSpaceLensId = null
+                        openSpaceId = it.id
+                    },
                     onDeleteRequest = { deletingSpace = it }
                 )
                 2 -> NotesScreen(
@@ -470,6 +549,7 @@ fun SievexApp() {
                         ) {
                             CaptureService.send(context, CaptureService.ACTION_ARM)
                         } else {
+                            pendingAudioAction = CaptureService.ACTION_ARM
                             audioPerm.launch(Manifest.permission.RECORD_AUDIO)
                         }
                     },
@@ -933,14 +1013,16 @@ private fun RecordScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             when (Pipeline.stage) {
+                // Action labels, not model names: the phone is doing something, and what it is
+                // doing is the only thing worth putting on this card.
                 PipelineStage.TRANSCRIBING -> StatusCard(
-                    title = "TRANSCRIBING",
-                    body = "Parakeet is reading the burst.",
+                    title = "TRANSCRIBING AUDIO",
+                    body = "",
                     accent = Blue
                 )
                 PipelineStage.TRANSFORMING -> StatusCard(
-                    title = "SHAPING THE NOTE",
-                    body = "LFM3 is choosing the mode, title and insight.",
+                    title = Pipeline.step.ifBlank { "Understanding intent" }.uppercase(Locale.US),
+                    body = "",
                     accent = Mint
                 )
                 PipelineStage.DONE -> DoneCard(Pipeline.lastTitle, onOpenNotes)
@@ -1344,6 +1426,7 @@ private fun SpaceRow(
 private fun SpaceScreen(
     space: Space,
     allNotes: List<NoteItem>,
+    initialLensId: String? = null,
     onBack: () -> Unit,
     onOpenNote: (NoteItem) -> Unit
 ) {
@@ -1358,7 +1441,9 @@ private fun SpaceScreen(
     var lensEpoch by remember(space.id) { mutableStateOf(0) }
     /** False until the first resolve lands: "no lenses" must never be shown for a space that has them. */
     var lensesLoaded by remember(space.id) { mutableStateOf(false) }
-    var selectedLensId by remember(space.id) { mutableStateOf<String?>(null) }
+    // A report notification names the lens too, so the screen opens on the report it announced
+    // instead of whichever chip happens to be first.
+    var selectedLensId by remember(space.id) { mutableStateOf(initialLensId) }
     var artifact by remember(space.id) { mutableStateOf<LensArtifact?>(null) }
     var runningLensId by remember(space.id) { mutableStateOf<String?>(null) }
     var failedLensId by remember(space.id) { mutableStateOf<String?>(null) }
@@ -1387,41 +1472,44 @@ private fun SpaceScreen(
     // the new lens's heading, not even for the frame before the read lands.
     LaunchedEffect(space.id, selectedId) {
         artifact = null
+        // Switching chips must not leave the previous lens's id gating this screen: the state
+        // read below is authoritative for the lens actually selected.
+        runningLensId = null
         val wanted = selectedId ?: return@LaunchedEffect
         while (true) {
             val latest = withContext(Dispatchers.IO) { SpaceStore.latest(space.id, wanted) }
             if (latest != artifact) artifact = latest
+            // A run started from this screen, or one already going when the screen opened. The
+            // service owns the work; this only mirrors its state onto the button and the notice.
+            when (LensService.state(space.id, wanted)) {
+                LensService.RunState.RUNNING -> runningLensId = wanted
+                LensService.RunState.DONE -> {
+                    if (runningLensId == wanted) runningLensId = null
+                    failedLensId = null
+                }
+                LensService.RunState.FAILED -> {
+                    if (runningLensId == wanted) runningLensId = null
+                    // Only worth saying when there is no older report to read instead.
+                    if (artifact == null) failedLensId = wanted
+                }
+                // The request has not been claimed by the service yet; keep the button as it is.
+                LensService.RunState.IDLE -> Unit
+            }
             delay(600)
         }
     }
 
-    // The lens on screen when this lambda was built, not when the run returns. A generate that
-    // outlives a chip switch must never write its report under the heading now on screen.
-    val generateFor = selectedId
+    // The lens on screen when this lambda was built, not when the run returns.
+    // (The service writes the artifact by lens kind, so a stale switch cannot overwrite another.)
 
-    // The model call is expensive and blocking: never on the frame thread.
+    // The report can take a minute on a large space, so it runs in a foreground service: leaving
+    // this screen, locking the phone, or closing the app no longer cancels it, and the completion
+    // notification is the signal that it is done.
     val generate: (LensSpec) -> Unit = { spec ->
         if (runningLensId == null && spaceNotes.isNotEmpty()) {
             runningLensId = spec.id
             failedLensId = null
-            val requested = spec.id
-            scope.launch(Dispatchers.IO) {
-                val result = Lens.generate(
-                    context.filesDir,
-                    space,
-                    NoteStore.inSpace(space.id),
-                    spec
-                )
-                withContext(Dispatchers.Main) {
-                    runningLensId = null
-                    if (result == null) {
-                        failedLensId = requested
-                    } else if (result.kind == generateFor) {
-                        // Only take the result if its chip is still the one on screen.
-                        artifact = result
-                    }
-                }
-            }
+            LensService.start(context, space.id, spec.id)
         }
     }
 
@@ -1643,7 +1731,8 @@ private fun SpaceScreen(
                                     )
                                     Spacer(Modifier.height(6.dp))
                                     Text(
-                                        "Reading ${spaceNotes.size} notes on-device.",
+                                        "Working in the background. You can leave this screen — " +
+                                            "we'll notify you when the report is ready.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = Ink2
                                     )

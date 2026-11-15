@@ -520,7 +520,7 @@ class CaptureService : Service() {
         Pipeline.transforming()
         val time = SimpleDateFormat("HH:mm", Locale.US).format(Date())
         val whenText = "Today $time"
-        val structured = Transform.apply(filesDir, text)
+        val structured = Transform.apply(filesDir, text) { phase -> Pipeline.transformingStep(phase) }
 
         // The space could have been deleted while this burst sat in the queue.
         val spaceId = job.spaceId?.takeIf { id -> SpaceStore.all().any { it.id == id } }

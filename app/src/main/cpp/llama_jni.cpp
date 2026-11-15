@@ -214,6 +214,46 @@ std::string get_bytes(JNIEnv * env, jbyteArray value) {
     return out;
 }
 
+/**
+ * Reports coarse generation phases to Kotlin while the call is still blocking.
+ *
+ * The grammar pins the field order, so the keys appearing in the output are honest checkpoints:
+ * mode, then title, then one_line, then why_it_matters, then tags. The UI turns them into
+ * "Understanding intent", "Crafting title", "Creating insights" without inventing progress.
+ */
+struct PhaseReporter {
+    JNIEnv * env = nullptr;
+    jobject target = nullptr;
+    jmethodID method = nullptr;
+    int last = 0;
+
+    PhaseReporter(JNIEnv * e, jobject t) : env(e), target(t) {
+        if (target == nullptr) return;
+        jclass cls = env->GetObjectClass(target);
+        if (cls == nullptr) {
+            env->ExceptionClear();
+            return;
+        }
+        method = env->GetMethodID(cls, "onPhase", "(I)V");
+        if (method == nullptr) {
+            LOGE("phase listener has no onPhase(I)V; progress will stay on the first label");
+            env->ExceptionClear();
+        }
+        env->DeleteLocalRef(cls);
+    }
+
+    void emit(int phase) {
+        if (method == nullptr || target == nullptr || phase <= last) return;
+        last = phase;
+        env->CallVoidMethod(target, method, phase);
+        if (env->ExceptionCheck()) {
+            // A listener that throws must not poison the JNI call or leak into the next one.
+            env->ExceptionClear();
+            method = nullptr;
+        }
+    }
+};
+
 void log_perf(int32_t n_prompt, int32_t n_keep, int32_t n_generated) {
     const llama_perf_context_data perf = llama_perf_context(g_ctx);
     const double pp_s = perf.t_p_eval_ms > 0.0 ? perf.t_p_eval_ms / 1000.0 : 0.0;
@@ -295,7 +335,7 @@ Java_com_sievex_app_llm_LlamaBridge_nativeLoad(JNIEnv * env, jobject, jstring jp
 
 static jbyteArray complete_locked(
         JNIEnv * env, jbyteArray jprompt, jint maxTokens, jint nThreads,
-        jint nThreadsBatch, jbyteArray jgrammar) {
+        jint nThreadsBatch, jbyteArray jgrammar, jobject jprogress) {
     std::lock_guard<std::mutex> lock(g_mutex);
 
     if (g_model == nullptr) return empty_bytes(env);
@@ -389,6 +429,8 @@ static jbyteArray complete_locked(
     bool in_string = false;
     bool escaped = false;
     int32_t n_generated = 0;
+    PhaseReporter progress(env, jprogress);
+    progress.emit(1);
     for (int32_t i = 0; i < maxTokens; i++) {
         const llama_token id = llama_sampler_sample(smpl, g_ctx, -1);
         if (id < 0) break;
@@ -421,6 +463,12 @@ static jbyteArray complete_locked(
         }
         n_generated++;
 
+        // Field order is fixed by the grammar, so the keys are honest checkpoints.
+        if (out.find("\"title\"") != std::string::npos) progress.emit(2);
+        if (out.find("\"one_line\"") != std::string::npos) progress.emit(3);
+        if (out.find("\"why_it_matters\"") != std::string::npos) progress.emit(4);
+        if (out.find("\"tags\"") != std::string::npos) progress.emit(5);
+
         // A complete top-level object ends the generation; the token is not fed back, so it must
         // not enter the KV-cache bookkeeping either.
         if (opened && depth <= 0) break;
@@ -442,9 +490,9 @@ static jbyteArray complete_locked(
 extern "C" JNIEXPORT jbyteArray JNICALL
 Java_com_sievex_app_llm_LlamaBridge_nativeComplete(
         JNIEnv * env, jobject, jbyteArray jprompt, jint maxTokens, jint nThreads,
-        jint nThreadsBatch, jbyteArray jgrammar) {
+        jint nThreadsBatch, jbyteArray jgrammar, jobject jprogress) {
     try {
-        return complete_locked(env, jprompt, maxTokens, nThreads, nThreadsBatch, jgrammar);
+        return complete_locked(env, jprompt, maxTokens, nThreads, nThreadsBatch, jgrammar, jprogress);
     } catch (const std::exception & e) {
         LOGE("complete failed: %s", e.what());
         return empty_bytes(env);

@@ -12,6 +12,15 @@ import java.nio.charset.StandardCharsets
  */
 object LlamaBridge {
 
+    /**
+     * Coarse checkpoints during one generation, reported from the native decode loop as the
+     * grammar-pinned field keys appear. 1 = intent, 2 = title, 3 = summary, 4 = insights,
+     * 5 = tags. The UI only uses them for label text; a missed phase costs nothing.
+     */
+    fun interface TransformProgress {
+        fun onPhase(phase: Int)
+    }
+
     init {
         System.loadLibrary("sievex_llm")
     }
@@ -36,7 +45,8 @@ object LlamaBridge {
         maxTokens: Int,
         threads: Int,
         threadsBatch: Int,
-        grammar: ByteArray
+        grammar: ByteArray,
+        progress: TransformProgress?
     ): ByteArray?
 
     /** Drops cached KV state but keeps the model loaded. */
@@ -57,12 +67,13 @@ object LlamaBridge {
         maxTokens: Int,
         threads: Int = decodeThreads(),
         threadsBatch: Int = batchThreads(),
-        grammar: String = ""
+        grammar: String = "",
+        progress: TransformProgress? = null
     ): String {
         val promptBytes = prompt.toByteArray(StandardCharsets.UTF_8)
         val grammarBytes = if (grammar.isEmpty()) EMPTY else grammar.toByteArray(StandardCharsets.UTF_8)
         val bytes = runCatching {
-            nativeComplete(promptBytes, maxTokens, threads, threadsBatch, grammarBytes)
+            nativeComplete(promptBytes, maxTokens, threads, threadsBatch, grammarBytes, progress)
         }.getOrNull() ?: return ""
         return String(bytes, StandardCharsets.UTF_8)
     }
