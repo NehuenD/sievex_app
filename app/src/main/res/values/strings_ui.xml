@@ -63,7 +63,7 @@
     <string name="ui_capture_arm">Arm capture</string>
     <string name="ui_record_subtitle_ready">Tap to capture, tap again to stop</string>
     <string name="ui_record_subtitle_setup">Finish setup first</string>
-    <string name="ui_record_setup_body">The speech model is always needed. Shaping a Note, List or Steps also needs the transform model; Plain does not.</string>
+    <string name="ui_record_setup_body">The transcription model is always needed. Shaping a Note, List or Steps also needs the language model; Plain does not.</string>
     <string name="ui_record_stage_transcribing">TRANSCRIBING AUDIO</string>
     <string name="ui_record_stage_failed">NOTHING FILED</string>
     <string name="ui_record_tap_to_record">Tap to record</string>
@@ -83,12 +83,12 @@
     <string name="ui_note_edited">edited</string>
 
     <!-- Model setup cards -->
-    <string name="ui_speech_model">SPEECH MODEL</string>
+    <string name="ui_speech_model">TRANSCRIPTION MODEL</string>
     <string name="ui_speech_model_blurb">One-time download, 640 MB. Everything runs on-device afterwards.</string>
-    <string name="ui_speech_model_download">Download speech model</string>
-    <string name="ui_transform_model">TRANSFORM MODEL</string>
-    <string name="ui_transform_model_blurb">LFM3-1.7B, 1.1 GB. Gives every note its mode, title, why it matters and an open question.</string>
-    <string name="ui_transform_model_download">Download transform model</string>
+    <string name="ui_speech_model_download">Download transcription model</string>
+    <string name="ui_transform_model">LANGUAGE MODEL (LLM)</string>
+    <string name="ui_transform_model_blurb">1.1 GB. Gives every note its mode, title, why it matters and an open question.</string>
+    <string name="ui_transform_model_download">Download language model</string>
 
     <!-- Note detail -->
     <string name="ui_note_label">NOTE</string>
@@ -139,7 +139,7 @@
     <string name="ui_new_note_saving">Saving…</string>
     <string name="ui_new_note_shape_with_ai">Shape with AI</string>
     <string name="ui_new_note_plain_hint">Plain keeps your words exactly as typed.</string>
-    <string name="ui_new_note_no_model">The transform model isn\'t installed, so this note is saved as plain text. Add it in Settings to shape notes.</string>
+    <string name="ui_new_note_no_model">The language model isn\'t installed, so this note is saved as plain text. Add it in Settings to shape notes.</string>
     <string name="ui_placeholder_new_note_text">What you want to keep</string>
     <string name="ui_placeholder_new_note_title">Optional: used exactly as written</string>
 
@@ -152,13 +152,13 @@
     <string name="ui_settings_live">Live</string>
     <string name="ui_settings_idle">Idle</string>
     <string name="ui_settings_transcription">Transcription</string>
-    <string name="ui_settings_transcription_value">Parakeet TDT 0.6B v3</string>
+    <string name="ui_settings_transcription_value">On-device</string>
     <string name="ui_settings_transform">Transform</string>
-    <string name="ui_settings_transform_value">LFM3-1.7B</string>
-    <string name="ui_settings_speech_model_body">Parakeet TDT 0.6B v3, 640 MB. Downloaded once over HTTPS and verified against pinned checksums. After that the app runs fully offline.</string>
+    <string name="ui_settings_transform_value">On-device</string>
+    <string name="ui_settings_speech_model_body">640 MB. Downloaded once over HTTPS and verified against pinned checksums. After that the app runs fully offline.</string>
     <string name="ui_settings_model_ready">Model ready</string>
     <string name="ui_settings_model_progress">%1$d%%</string>
-    <string name="ui_settings_download_model">Download model (640 MB)</string>
+    <string name="ui_settings_download_model">Download transcription model (640 MB)</string>
     <string name="ui_settings_event_log">EVENT LOG</string>
     <string name="ui_settings_no_events">no events yet</string>
 
@@ -168,11 +168,11 @@
     <string name="ui_lens_generate">Generate</string>
     <string name="ui_lens_regenerate">Regenerate</string>
     <string name="ui_lens_working">Working in the background. You can leave this screen — we\'ll notify you when the report is ready.</string>
-    <string name="ui_lens_failed">No report produced. Check the transform model in Settings, then try again.</string>
+    <string name="ui_lens_failed">No report produced. Check the language model in Settings, then try again.</string>
     <string name="ui_lens_needs_notes">A space needs at least one note before a lens can say anything.</string>
     <string name="ui_lens_stale_hint">Notes changed since this was generated. Regenerate to bring it current.</string>
     <string name="ui_lens_none_title">NO LENSES ON THIS SPACE</string>
-    <string name="ui_lens_none_body">A lens is one way of reading every note in this space: it picks the headings, cites the notes it used, and can be regenerated any time.</string>
+    <string name="ui_lens_none_body">A lens is one way of reading every note in this space: it picks the headings, reads the notes, and can be regenerated any time.</string>
     <string name="ui_lens_empty_title">NO %1$s YET</string>
     <string name="ui_lens_empty_body">It reads every note in this space and cites the ones it used. Nothing is written until you generate it.</string>
     <string name="ui_lens_from_notes">from %1$d notes · %2$s</string>

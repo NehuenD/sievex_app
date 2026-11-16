@@ -63,7 +63,7 @@
     <string name="ui_capture_arm">Activar captura</string>
     <string name="ui_record_subtitle_ready">Toca para grabar, toca otra vez para parar</string>
     <string name="ui_record_subtitle_setup">Termina la configuración primero</string>
-    <string name="ui_record_setup_body">El modelo de voz siempre hace falta. Dar forma a una Nota, Lista o Pasos también necesita el modelo de transformación; Texto no.</string>
+    <string name="ui_record_setup_body">El modelo de transcripción siempre hace falta. Dar forma a una Nota, Lista o Pasos también necesita el modelo de lenguaje; Texto no.</string>
     <string name="ui_record_stage_transcribing">TRANSCRIBIENDO AUDIO</string>
     <string name="ui_record_stage_failed">NADA ARCHIVADO</string>
     <string name="ui_record_tap_to_record">Toca para grabar</string>
@@ -83,12 +83,12 @@
     <string name="ui_note_edited">editada</string>
 
     <!-- Model setup cards -->
-    <string name="ui_speech_model">MODELO DE VOZ</string>
+    <string name="ui_speech_model">MODELO DE TRANSCRIPCIÓN</string>
     <string name="ui_speech_model_blurb">Una sola descarga, 640 MB. Después todo funciona en el dispositivo.</string>
-    <string name="ui_speech_model_download">Descargar modelo de voz</string>
-    <string name="ui_transform_model">MODELO DE TRANSFORMACIÓN</string>
-    <string name="ui_transform_model_blurb">LFM3-1.7B, 1.1 GB. Da a cada nota su modo, título, por qué importa y una pregunta abierta.</string>
-    <string name="ui_transform_model_download">Descargar modelo de transformación</string>
+    <string name="ui_speech_model_download">Descargar modelo de transcripción</string>
+    <string name="ui_transform_model">MODELO DE LENGUAJE (LLM)</string>
+    <string name="ui_transform_model_blurb">1.1 GB. Da a cada nota su modo, título, por qué importa y una pregunta abierta.</string>
+    <string name="ui_transform_model_download">Descargar modelo de lenguaje</string>
 
     <!-- Note detail -->
     <string name="ui_note_label">NOTA</string>
@@ -139,7 +139,7 @@
     <string name="ui_new_note_saving">Guardando…</string>
     <string name="ui_new_note_shape_with_ai">Dar forma con IA</string>
     <string name="ui_new_note_plain_hint">Texto deja tus palabras tal como las escribes.</string>
-    <string name="ui_new_note_no_model">El modelo de transformación no está instalado, así que esta nota se guarda como texto. Añádelo en Ajustes para dar forma a las notas.</string>
+    <string name="ui_new_note_no_model">El modelo de lenguaje no está instalado, así que esta nota se guarda como texto. Añádelo en Ajustes para dar forma a las notas.</string>
     <string name="ui_placeholder_new_note_text">Lo que quieres guardar</string>
     <string name="ui_placeholder_new_note_title">Opcional: se usa tal cual</string>
 
@@ -152,13 +152,13 @@
     <string name="ui_settings_live">Activo</string>
     <string name="ui_settings_idle">Sin actividad</string>
     <string name="ui_settings_transcription">Transcripción</string>
-    <string name="ui_settings_transcription_value">Parakeet TDT 0.6B v3</string>
+    <string name="ui_settings_transcription_value">En el dispositivo</string>
     <string name="ui_settings_transform">Transformación</string>
-    <string name="ui_settings_transform_value">LFM3-1.7B</string>
-    <string name="ui_settings_speech_model_body">Parakeet TDT 0.6B v3, 640 MB. Se descarga una vez por HTTPS y se verifica con sumas de comprobación fijas. Después la app funciona totalmente sin conexión.</string>
+    <string name="ui_settings_transform_value">En el dispositivo</string>
+    <string name="ui_settings_speech_model_body">640 MB. Se descarga una vez por HTTPS y se verifica con sumas de comprobación fijas. Después la app funciona totalmente sin conexión.</string>
     <string name="ui_settings_model_ready">Modelo listo</string>
     <string name="ui_settings_model_progress">%1$d%%</string>
-    <string name="ui_settings_download_model">Descargar modelo (640 MB)</string>
+    <string name="ui_settings_download_model">Descargar modelo de transcripción (640 MB)</string>
     <string name="ui_settings_event_log">REGISTRO DE EVENTOS</string>
     <string name="ui_settings_no_events">aún sin eventos</string>
 
@@ -168,11 +168,11 @@
     <string name="ui_lens_generate">Generar</string>
     <string name="ui_lens_regenerate">Regenerar</string>
     <string name="ui_lens_working">Trabajando en segundo plano. Puedes salir de esta pantalla: te avisamos cuando el informe esté listo.</string>
-    <string name="ui_lens_failed">No se generó ningún informe. Revisa el modelo de transformación en Ajustes y vuelve a intentarlo.</string>
+    <string name="ui_lens_failed">No se generó ningún informe. Revisa el modelo de lenguaje en Ajustes y vuelve a intentarlo.</string>
     <string name="ui_lens_needs_notes">Un espacio necesita al menos una nota para que una lente pueda decir algo.</string>
     <string name="ui_lens_stale_hint">Las notas cambiaron desde que se generó. Regenera para ponerlo al día.</string>
     <string name="ui_lens_none_title">SIN LENTES EN ESTE ESPACIO</string>
-    <string name="ui_lens_none_body">Una lente es una forma de leer todas las notas de este espacio: elige los encabezados, cita las notas que usó y se puede regenerar cuando quieras.</string>
+    <string name="ui_lens_none_body">Una lente es una forma de leer todas las notas de este espacio: elige los encabezados, lee las notas y se puede regenerar cuando quieras.</string>
     <string name="ui_lens_empty_title">AÚN SIN %1$s</string>
     <string name="ui_lens_empty_body">Lee todas las notas de este espacio y cita las que usó. No se escribe nada hasta que lo generes.</string>
     <string name="ui_lens_from_notes">de %1$d notas · %2$s</string>

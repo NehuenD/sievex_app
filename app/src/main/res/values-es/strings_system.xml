@@ -6,8 +6,8 @@
 <resources>
 
     <!-- First-run flow (Onboarding.kt) -->
-    <string name="sys_onboarding_step1_title">Graba mientras caminas</string>
-    <string name="sys_onboarding_step1_body">Un toque en el auricular inicia una ráfaga. Otro toque la detiene. Las manos siguen donde están.</string>
+    <string name="sys_onboarding_step1_title">Empieza a hablar</string>
+    <string name="sys_onboarding_step1_body">Toca grabar, di lo que tengas en mente y vuelve a tocar para parar. Se convierte en una nota sola.</string>
     <string name="sys_onboarding_step2_title">Nada sale de este teléfono</string>
     <string name="sys_onboarding_step2_body">La transcripción y la escritura se hacen en el dispositivo. Sin cuenta ni nube: nada de lo que grabas se sube.</string>
     <string name="sys_onboarding_step3_title">Graba lo que tengas en mente</string>
@@ -25,8 +25,8 @@
     <string name="sys_capture_processing_queued">Procesando ráfagas en cola</string>
 
     <!-- Pipeline messages set by the capture service and shown on the record screen -->
-    <string name="sys_pipeline_waiting_for_speech_model">Esperando al modelo de voz</string>
-    <string name="sys_pipeline_speech_model_not_ready">El modelo de voz no está listo</string>
+    <string name="sys_pipeline_waiting_for_speech_model">Esperando al modelo de transcripción</string>
+    <string name="sys_pipeline_speech_model_not_ready">El modelo de transcripción no está listo</string>
     <string name="sys_pipeline_transcribe_failed">No se pudo transcribir esa ráfaga</string>
     <string name="sys_pipeline_no_speech_detected">No se detectó voz en esa ráfaga</string>
 
@@ -43,15 +43,15 @@
     <string name="sys_lens_report_failed_text">No se pudo generar %1$s para %2$s. Toca para abrir el espacio y reintentar.</string>
 
     <!-- Speech model download status (ModelInstaller.kt) -->
-    <string name="sys_asr_status_not_installed">Modelo de voz no instalado</string>
-    <string name="sys_asr_status_installed">Parakeet instalado (%1$d MB)</string>
-    <string name="sys_asr_status_downloading">Descargando %1$s</string>
-    <string name="sys_asr_status_verifying">Verificando %1$s</string>
+    <string name="sys_asr_status_not_installed">Modelo de transcripción no instalado</string>
+    <string name="sys_asr_status_installed">Modelo de transcripción instalado (%1$d MB)</string>
+    <string name="sys_asr_status_downloading">Descargando el modelo de transcripción</string>
+    <string name="sys_asr_status_verifying">Verificando el modelo de transcripción</string>
     <string name="sys_asr_status_incomplete">La descarga terminó, pero los archivos están incompletos</string>
 
     <!-- Transform model download status (TransformModel.kt) -->
-    <string name="sys_llm_status_not_installed">Modelo de transformación no instalado</string>
-    <string name="sys_llm_status_ready">LFM3-1.7B listo (%1$d MB)</string>
+    <string name="sys_llm_status_not_installed">Modelo de lenguaje no instalado</string>
+    <string name="sys_llm_status_ready">Modelo de lenguaje listo (%1$d MB)</string>
 
     <!-- Shared by both model downloaders -->
     <string name="sys_model_starting_download">Iniciando descarga</string>
