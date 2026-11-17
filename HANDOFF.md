@@ -77,9 +77,14 @@ safety, ASR threads, warm/unload, 90 s cap, benchmark harness (`spike/bench.sh` 
 **Open:** the LLM native libs were built with `GGML_NATIVE=OFF` and no ARM arch flags → generic
 NEON only (zero `dotprod`/`i8mm`/`smmla` instructions in `libggml-cpu.so`). The ASR runtime *is*
 armv8.2-optimized. Rebuilding ggml with `-DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+i8mm` (+ optional
-KleidiAI) is expected to give ~2–3× prefill / 1.2–1.6× decode. **Blocked:** `spike/llama.cpp`
-(the fork source the shipped libs came from) is not in the repo; the headers expose a non-upstream
-API (`llama_process`, `llama_batch_ext_*`). `spike/build-llama-android.sh` already has the flags.
+KleidiAI) is expected to give ~2–3× prefill / 1.2–1.6× decode. **Not blocked** — the earlier claim
+that the shipped libs came from a fork with a non-upstream API was wrong: `spike/llama-headers/` is
+an upstream snapshot, and `llama_process`/`llama_batch_ext_*` are current upstream API (upstream now
+deprecates `llama_decode`/`llama_batch_init` in their favour). `spike/build-llama-android.sh` has
+the flags. Scope and evidence: `docs/llm-rebase-brief.md`.
+
+Also worth fixing when the libs are next regenerated: the committed `libllama.so` is 46.7 MB, i.e.
+effectively unstripped, so the strip step is not taking — that is ~47 MB of APK for nothing.
 
 ## In-flight design: Spaces become media containers
 
@@ -166,7 +171,9 @@ single-target build).
 ## Suggested next actions
 
 1. Implement media P1 (data + share sheet + Save/Save & record + delete cascade), then P2 (C UI).
-2. In parallel/after: start the LLM re-base as its own reversible step; first task is diffing the
-   fork headers against upstream `llama.h` to size the JNI port.
+2. In parallel/after: the LLM re-base, as its own reversible step. Sizing is done and the news is
+   good — there is no fork, and `llama_jni.cpp` needs **no changes** (it compiles clean against
+   upstream headers). Next: parity build at a pinned commit, then the arch-flag build, then the
+   device A/B. See `docs/llm-rebase-brief.md`.
 3. Once re-based and kernels enabled, re-run `spike/bench.sh` before/after.
 4. Only then consider an optional VLM (LFM3‑VL‑2B or MiniCPM‑V 4.7 1B), on demand with unload.

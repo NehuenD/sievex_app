@@ -3,11 +3,16 @@
 # libraries the app links against into app/src/main/jniLibs/arm64-v8a, and strip them there.
 #
 # PREREQUISITES - read this before running:
-#   1. The llama.cpp source tree used to build the libraries currently in this repo is NOT
-#      checked in (only spike/llama-headers/ is). The shipped libraries expose a fork API
-#      (llama_process / llama_batch_ext_* in app/src/main/cpp/llama_jni.cpp) that upstream
-#      llama.cpp does not have, so that fork must be restored at spike/llama.cpp before this
-#      script can produce a usable build. Nothing here fetches or fakes it.
+#   1. The llama.cpp source tree is not checked in; put any recent upstream checkout at
+#      spike/llama.cpp (gitignored):
+#        git clone --depth 1 https://github.com/ggml-org/llama.cpp spike/llama.cpp
+#      Any recent upstream commit works. The shipped libraries were built from an upstream
+#      snapshot, and the API llama_jni.cpp calls (llama_process / llama_batch_ext_*) is current
+#      upstream API, not a fork extension: upstream has since deprecated llama_decode /
+#      llama_batch_init in favour of exactly these calls.
+#      Keep spike/llama-headers/ in step with whatever commit is built here - the JNI is
+#      compiled against those headers and linked against these libraries, so a mismatch is an
+#      ABI mismatch, not a build error.
 #   2. The Android NDK plus a CMake/Ninja install are required.
 #
 # WHY THE ARCH FLAG IS THE POINT:
@@ -89,7 +94,7 @@ find_llvm_strip() {
 STRIP=$(find_llvm_strip) || die "llvm-strip not found under $NDK/toolchains/llvm/prebuilt/*/bin"
 
 [ -f "$SRC/CMakeLists.txt" ] \
-  || die "no llama.cpp source at $SRC - restore the fork described at the top of this script"
+  || die "no llama.cpp source at $SRC - clone upstream there (see the top of this script)"
 
 # --- configure -------------------------------------------------------------
 
