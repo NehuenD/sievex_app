@@ -67,6 +67,12 @@ class CaptureService : Service() {
     @Volatile
     private var burstFormat: String? = null
 
+    @Volatile
+    private var burstMediaIds: List<String> = emptyList()
+
+    @Volatile
+    private var burstSpaceId: String? = null
+
     /** Handler retries are posted here so they survive the worker thread finishing a drain. */
     private val mainHandler: Handler by lazy { Handler(Looper.getMainLooper()) }
     private val retryRunnable = Runnable { processNext() }
@@ -116,7 +122,9 @@ class CaptureService : Service() {
             ACTION_DISARM -> disarm()
             ACTION_START_BURST -> {
                 if (!armed) arm()
-                startBurst(intent.getStringExtra(EXTRA_WHY) ?: "manual")
+                val mediaIds = intent.getStringArrayListExtra(EXTRA_MEDIA_IDS)?.toList() ?: emptyList()
+                val spaceId = intent.getStringExtra(EXTRA_SPACE_ID)?.takeIf { it.isNotBlank() }
+                startBurst(intent.getStringExtra(EXTRA_WHY) ?: "manual", mediaIds, spaceId)
             }
             ACTION_STOP_BURST -> stopBurst()
             ACTION_KICK -> return handleKick()
@@ -269,7 +277,11 @@ class CaptureService : Service() {
         processNext()
     }
 
-    fun startBurst(why: String) {
+    fun startBurst(
+        why: String,
+        mediaIds: List<String> = emptyList(),
+        spaceId: String? = null
+    ) {
         if (recording) return
         if (!armed) {
             CaptureLog.add("burst ignored, not armed ($why)")
@@ -280,6 +292,8 @@ class CaptureService : Service() {
         // Snapshot the shape now: the picker stays on screen while recording, and changing it must
         // apply to the next burst, not the one being spoken.
         burstFormat = Formats.next.id
+        burstMediaIds = mediaIds
+        burstSpaceId = spaceId
         // Set before the capture thread starts: a recorder that dies on its first read invokes
         // onComplete() immediately, and processBurst() has to see the state stopBurst() leaves
         // behind, not a service that still believes it is recording.
@@ -364,14 +378,17 @@ class CaptureService : Service() {
         val job = Job(
             id = UUID.randomUUID().toString(),
             wavPath = file.absolutePath,
-            spaceId = SpaceStore.currentSpaceId,
+            spaceId = burstSpaceId ?: SpaceStore.currentSpaceId,
             attempts = 0,
             // Read now, not when the job drains: the user may change the format for the next
             // burst while this one is still queued.
-            format = burstFormat ?: Formats.next.id
+            format = burstFormat ?: Formats.next.id,
+            mediaIds = burstMediaIds
         )
         JobQueue.add(job)
         burstFormat = null
+        burstMediaIds = emptyList()
+        burstSpaceId = null
         CaptureLog.add("queued ${file.name}${job.spaceId?.let { " into $it" } ?: ""}")
         processNext()
     }
@@ -574,7 +591,8 @@ class CaptureService : Service() {
                 audioPath = file.absolutePath,
                 spaceId = spaceId,
                 format = format.id,
-                items = structured.items
+                items = structured.items,
+                createdAt = System.currentTimeMillis()
             )
         } else {
             val words = text.split(Regex("\\s+")).filter { it.isNotBlank() }
@@ -593,11 +611,15 @@ class CaptureService : Service() {
                 audioPath = file.absolutePath,
                 spaceId = spaceId,
                 // The format could not be applied, so the note is honestly plain.
-                format = NoteFormat.PLAIN.id
+                format = NoteFormat.PLAIN.id,
+                createdAt = System.currentTimeMillis()
             )
         }
 
         NoteStore.add(note)
+        if (job.mediaIds.isNotEmpty()) {
+            MediaStore.linkNoteToMedia(job.mediaIds, note.id)
+        }
         Pipeline.done(note.title)
         CaptureLog.add("note filed")
         JobQueue.remove(job.id)
@@ -723,6 +745,8 @@ class CaptureService : Service() {
         const val ACTION_STOP_BURST = "com.sievex.STOP_BURST"
         const val ACTION_KICK = "com.sievex.KICK"
         const val EXTRA_WHY = "why"
+        const val EXTRA_MEDIA_IDS = "media_ids"
+        const val EXTRA_SPACE_ID = "space_id"
 
         private const val CHANNEL = "capture"
         private const val NOTIF_ID = 42
@@ -781,6 +805,20 @@ class CaptureService : Service() {
             } else {
                 context.startService(intent)
             }
+        }
+
+        fun sendBurstWithMedia(
+            context: Context,
+            mediaIds: List<String>,
+            spaceId: String?,
+            why: String = "share"
+        ) {
+            val intent = Intent(context, CaptureService::class.java)
+                .setAction(ACTION_START_BURST)
+                .putExtra(EXTRA_WHY, why)
+                .putStringArrayListExtra(EXTRA_MEDIA_IDS, ArrayList(mediaIds))
+            if (!spaceId.isNullOrBlank()) intent.putExtra(EXTRA_SPACE_ID, spaceId)
+            context.startForegroundService(intent)
         }
 
         /** Called from the media listener, which runs in the same process. */

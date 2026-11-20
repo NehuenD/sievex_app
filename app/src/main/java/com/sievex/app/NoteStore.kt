@@ -27,7 +27,9 @@ data class StoredNote(
     /** How the note was shaped; see [NoteFormat]. Defaults keep older files readable. */
     val format: String = NoteFormat.NOTE.id,
     /** The bullet or step list a LIST/STEPS note carries; empty for every other format. */
-    val items: List<String> = emptyList()
+    val items: List<String> = emptyList(),
+    /** Epoch millis when the note was created; migrated descending for legacy notes. */
+    val createdAt: Long = 0L
 )
 
 /** Flat JSON persistence. Enough until the Markdown filing layer lands. */
@@ -63,6 +65,7 @@ object NoteStore {
         SpaceStore.init(root)
         LensStore.init(root)
         JobQueue.init(root)
+        MediaStore.init(root)
         // Dangling space links can only be detected once spaces.json is in memory, so this is
         // after SpaceStore.init and never inside load().
         repairSpaceLinks()
@@ -114,7 +117,8 @@ object NoteStore {
 
     @Synchronized
     fun add(note: StoredNote) {
-        notes.add(0, note)
+        val stamped = if (note.createdAt > 0L) note else note.copy(createdAt = System.currentTimeMillis())
+        notes.add(0, stamped)
         save()
     }
 
@@ -226,7 +230,8 @@ object NoteStore {
                         format = o.optString("format", NoteFormat.NOTE.id)
                             .takeIf { NoteFormat.entries.any { f -> f.id == it } }
                             ?: NoteFormat.NOTE.id,
-                        items = items
+                        items = items,
+                        createdAt = o.optLong("createdAt", 0L)
                     )
                 )
             }
@@ -234,9 +239,21 @@ object NoteStore {
         }
 
         parsed.onSuccess { loaded ->
+            var migrated = false
+            if (loaded.any { it.createdAt <= 0L }) {
+                val base = loaded.filter { it.createdAt > 0L }.minOfOrNull { it.createdAt }?.minus(1000L)
+                    ?: System.currentTimeMillis()
+                for (i in loaded.indices) {
+                    if (loaded[i].createdAt <= 0L) {
+                        loaded[i] = loaded[i].copy(createdAt = (base - i * 1000L).coerceAtLeast(1L))
+                        migrated = true
+                    }
+                }
+            }
             notes.clear()
             notes.addAll(loaded)
             ids.set(loaded.maxOfOrNull { it.id } ?: 0L)
+            if (migrated) save()
         }.onFailure { e ->
             CaptureLog.add("notes: load failed - ${e.message}")
             quarantineUnreadable(f)
@@ -283,6 +300,7 @@ object NoteStore {
                         put("editedAt", n.editedAt ?: 0L)
                         put("format", n.format)
                         put("items", JSONArray(n.items))
+                        put("createdAt", n.createdAt)
                     }
                 )
             }

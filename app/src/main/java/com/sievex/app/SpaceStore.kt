@@ -123,6 +123,7 @@ object SpaceStore {
             return
         }
         NoteStore.clearSpace(id)
+        MediaStore.deleteForSpace(id)
 
         spaces.removeAll { it.id == id }
         artifacts.removeAll { it.spaceId == id }

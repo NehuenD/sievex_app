@@ -23,22 +23,42 @@
 #   use. There is no runtime error when this is wrong, only a slower benchmark.
 #
 # ENV:
-#   ARM_ARCH   -march for ggml's CPU backend (default: armv8.2-a+dotprod+i8mm)
-#   KLEIDIAI   set to 1 to add -DGGML_CPU_KLEIDIAI=ON (Arm's KleidiAI kernels; see below)
-#   SDK, NDK   override the auto-detected Android SDK / NDK roots
-#   JOBS       build parallelism (default: 8)
+#   ARM_ARCH         -march for ggml's CPU backend, or "baseline" / "" for generic armv8-a
+#                    (default: armv8.2-a+dotprod+i8mm)
+#   OUT              output directory for stripped .so files (default: spike/prebuilt/<variant>)
+#   INSTALL_JNILIBS  set to 1 to also copy stripped libs into app/src/main/jniLibs/arm64-v8a
+#   SYNC_HEADERS     set to 1 to update spike/llama-headers/ and UPSTREAM_COMMIT from spike/llama.cpp
+#   KLEIDIAI         set to 1 to add -DGGML_CPU_KLEIDIAI=ON (Arm's KleidiAI kernels; see below)
+#   SDK, NDK         override the auto-detected Android SDK / NDK roots
+#   JOBS             build parallelism (default: 8)
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 SRC="$HERE/llama.cpp"
-BUILD="$SRC/build-android-arm64"
-OUT="$HERE/../app/src/main/jniLibs/arm64-v8a"
+HEADERS="$HERE/llama-headers"
+JNILIBS="$HERE/../app/src/main/jniLibs/arm64-v8a"
 
 SDK=${SDK:-"$HOME/AppData/Local/Android/Sdk"}
 NDK=${NDK:-}
 ARM_ARCH=${ARM_ARCH:-armv8.2-a+dotprod+i8mm}
+INSTALL_JNILIBS=${INSTALL_JNILIBS:-0}
+SYNC_HEADERS=${SYNC_HEADERS:-0}
 KLEIDIAI=${KLEIDIAI:-0}
 JOBS=${JOBS:-8}
+
+if [ -z "$ARM_ARCH" ] || [ "$ARM_ARCH" = "baseline" ]; then
+  ARM_ARCH=""
+  VARIANT="baseline"
+  BUILD="$SRC/build-android-arm64"
+elif [ "$ARM_ARCH" = "armv8.2-a+dotprod+i8mm" ]; then
+  VARIANT="dotprod"
+  BUILD="$SRC/build-android-arm64-dotprod"
+else
+  VARIANT=$(printf '%s' "$ARM_ARCH" | tr '+/: ' '----')
+  BUILD="$SRC/build-android-arm64-$VARIANT"
+fi
+
+OUT=${OUT:-"$HERE/prebuilt/$VARIANT"}
 
 # The four libraries llama_jni.cpp links against (see spike/build-llm-jni.sh). Anything else the
 # build produces (Vulkan, RPC, ...) is deliberately not copied into the APK.
@@ -96,32 +116,72 @@ STRIP=$(find_llvm_strip) || die "llvm-strip not found under $NDK/toolchains/llvm
 [ -f "$SRC/CMakeLists.txt" ] \
   || die "no llama.cpp source at $SRC - clone upstream there (see the top of this script)"
 
+# --- headers / upstream commit consistency guard ---------------------------
+
+SRC_REV=""
+if command -v git >/dev/null 2>&1 && [ -d "$SRC/.git" ]; then
+  SRC_REV=$(git -C "$SRC" rev-parse HEAD)
+fi
+
+if [ "$SYNC_HEADERS" = "1" ]; then
+  log "== syncing headers -> $HEADERS =="
+  mkdir -p "$HEADERS/ggml"
+  cp -f "$SRC"/include/*.h "$HEADERS/"
+  cp -f "$SRC"/ggml/include/*.h "$HEADERS/ggml/"
+  if [ -n "$SRC_REV" ]; then
+    printf '%s\n' "$SRC_REV" > "$HEADERS/UPSTREAM_COMMIT"
+  fi
+else
+  if [ -f "$HEADERS/UPSTREAM_COMMIT" ] && [ -n "$SRC_REV" ]; then
+    PIN_REV=$(tr -d ' \t\r\n' < "$HEADERS/UPSTREAM_COMMIT")
+    if [ "$SRC_REV" != "$PIN_REV" ]; then
+      die "llama.cpp is at $SRC_REV but $HEADERS/UPSTREAM_COMMIT pins $PIN_REV (set SYNC_HEADERS=1 to update headers)"
+    fi
+  fi
+  for h in "$SRC"/include/*.h; do
+    base=$(basename "$h")
+    if [ ! -f "$HEADERS/$base" ] || ! cmp -s "$h" "$HEADERS/$base"; then
+      die "header drift: $HEADERS/$base differs from $SRC/include/$base (set SYNC_HEADERS=1 to update)"
+    fi
+  done
+  for h in "$SRC"/ggml/include/*.h; do
+    base=$(basename "$h")
+    if [ ! -f "$HEADERS/ggml/$base" ] || ! cmp -s "$h" "$HEADERS/ggml/$base"; then
+      die "header drift: $HEADERS/ggml/$base differs from $SRC/ggml/include/$base (set SYNC_HEADERS=1 to update)"
+    fi
+  done
+fi
+
 # --- configure -------------------------------------------------------------
 
 log "== configuring =="
+log "   VARIANT  : $VARIANT"
 log "   NDK      : $NDK"
-log "   ARM_ARCH : $ARM_ARCH"
+log "   ARM_ARCH : ${ARM_ARCH:-<baseline>}"
 log "   KLEIDIAI : $KLEIDIAI"
+log "   OUT      : $OUT"
 
 # Expanded unquoted on purpose: it is a list of flags and the value contains no spaces.
 EXTRA_ARGS=""
+if [ -n "$ARM_ARCH" ]; then
+  EXTRA_ARGS="-DGGML_CPU_ARM_ARCH=$ARM_ARCH"
+fi
 if [ "$KLEIDIAI" = "1" ]; then
   # Needs network access at configure time: ggml's CMake FetchContent clones KleidiAI then.
   # An offline configure fails here, which is why this is opt-in rather than the default.
-  EXTRA_ARGS="-DGGML_CPU_KLEIDIAI=ON"
+  EXTRA_ARGS="$EXTRA_ARGS -DGGML_CPU_KLEIDIAI=ON"
 fi
 
 # Configure on every run. The arch flag is the entire reason to run this script, and a cached
 # CMakeCache.txt from an earlier baseline build would otherwise keep the old -march silently.
 # shellcheck disable=SC2086
-cmake -B "$BUILD" -G Ninja \
+cmake -S "$SRC" -B "$BUILD" -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
   -DANDROID_ABI=arm64-v8a \
   -DANDROID_PLATFORM=android-30 \
   -DCMAKE_BUILD_TYPE=Release \
   -DBUILD_SHARED_LIBS=ON \
   -DGGML_NATIVE=OFF \
-  -DGGML_CPU_ARM_ARCH="$ARM_ARCH" \
   -DGGML_OPENMP=OFF \
   -DLLAMA_BUILD_TESTS=OFF \
   -DLLAMA_BUILD_EXAMPLES=OFF \
@@ -131,7 +191,7 @@ cmake -B "$BUILD" -G Ninja \
 
 # A ggml too old to know GGML_CPU_ARM_ARCH ignores it with only a CMake notice, and the build
 # would silently stay on baseline armv8-a. Say so loudly instead of shipping slow kernels.
-if [ -f "$BUILD/CMakeCache.txt" ]; then
+if [ -n "$ARM_ARCH" ] && [ -f "$BUILD/CMakeCache.txt" ]; then
   grep -q '^GGML_CPU_ARM_ARCH:' "$BUILD/CMakeCache.txt" \
     || warn "this llama.cpp/ggml has no GGML_CPU_ARM_ARCH option; the build is baseline armv8-a"
   if [ "$KLEIDIAI" = "1" ]; then
@@ -143,7 +203,9 @@ fi
 # --- build -----------------------------------------------------------------
 
 log "== building (-j $JOBS) =="
-cmake --build "$BUILD" -j "$JOBS"
+# Build only the four shared libraries llama_jni.cpp links against; a bare build also tries to
+# link bin/llama, which fails when -DLLAMA_BUILD_SERVER=OFF disables llama-server-impl.
+cmake --build "$BUILD" --target llama ggml ggml-base ggml-cpu -j "$JOBS"
 
 # --- copy into the APK's jniLibs ------------------------------------------
 
@@ -191,6 +253,14 @@ for lib in $LIBS; do
   after=$(wc -c < "$OUT/$lib" | tr -d ' ')
   printf '   %-18s %6s KB -> %6s KB\n' "$lib" "$((before / 1024))" "$((after / 1024))"
 done
+
+if [ "$INSTALL_JNILIBS" = "1" ] && [ "$OUT" != "$JNILIBS" ]; then
+  log "== installing into $JNILIBS =="
+  mkdir -p "$JNILIBS"
+  for lib in $LIBS; do
+    cp -f "$OUT/$lib" "$JNILIBS/$lib"
+  done
+fi
 
 log "== done: $OUT =="
 ls -lh "$OUT"

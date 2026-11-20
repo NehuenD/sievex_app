@@ -11,7 +11,9 @@ data class Job(
     val spaceId: String?,
     val attempts: Int,
     /** The format chosen when the burst started; jobs from older files default to a note. */
-    val format: String = NoteFormat.NOTE.id
+    val format: String = NoteFormat.NOTE.id,
+    /** Media items to link to the filed note once transcription + shaping finishes. */
+    val mediaIds: List<String> = emptyList()
 )
 
 /**
@@ -80,6 +82,14 @@ object JobQueue {
                 val wav = o.optString("wavPath")
                 if (id.isBlank() || wav.isBlank()) continue
                 val spaceId = o.optString("spaceId").trim()
+                val mediaIds = mutableListOf<String>()
+                val ma = o.optJSONArray("mediaIds")
+                if (ma != null) {
+                    for (j in 0 until ma.length()) {
+                        val mid = ma.optString(j)
+                        if (mid.isNotBlank()) mediaIds.add(mid)
+                    }
+                }
                 jobs.add(
                     Job(
                         id = id,
@@ -88,7 +98,8 @@ object JobQueue {
                         attempts = o.optInt("attempts"),
                         format = o.optString("format", NoteFormat.NOTE.id)
                             .takeIf { candidate -> NoteFormat.entries.any { it.id == candidate } }
-                            ?: NoteFormat.NOTE.id
+                            ?: NoteFormat.NOTE.id,
+                        mediaIds = mediaIds
                     )
                 )
             }
@@ -108,6 +119,7 @@ object JobQueue {
                         put("spaceId", j.spaceId ?: "")
                         put("attempts", j.attempts)
                         put("format", j.format)
+                        if (j.mediaIds.isNotEmpty()) put("mediaIds", JSONArray(j.mediaIds))
                     }
                 )
             }
