@@ -240,4 +240,6 @@
     <string name="ui_share_saving">Saving…</string>
     <string name="ui_share_failed">Could not read image</string>
     <string name="ui_share_mic_needed">Microphone permission is needed to record — saved image instead.</string>
+    <string name="ui_media_ocr_label">Extracted text</string>
+    <string name="ui_media_ocr_copy">Copy text</string>
 </resources>

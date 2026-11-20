@@ -53,6 +53,10 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -257,11 +261,20 @@ internal fun MediaViewerDialog(
     var captionDraft by remember(media.id, media.caption) { mutableStateOf(media.caption) }
     var linkingNotes by remember(media.id) { mutableStateOf(false) }
     var confirmingDelete by remember(media.id) { mutableStateOf(false) }
+    var viewingOcr by remember(media.id) { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
 
     LaunchedEffect(media.id, media.file) {
         val f = MediaStore.resolveFile(media.file)
         if (f != null) {
             fullBitmap = MediaBitmapCache.loadFile(f, 2048)
+        }
+    }
+
+    LaunchedEffect(media.id, media.ocrScanned) {
+        if (!media.ocrScanned) {
+            val updated = withContext(Dispatchers.IO) { MediaStore.ensureOcr(media.id) }
+            if (updated != null && updated.ocrScanned) onMediaChanged()
         }
     }
 
@@ -430,6 +443,14 @@ internal fun MediaViewerDialog(
                                 foreground = Signal,
                                 onClick = { linkingNotes = true }
                             )
+                            if (media.ocrText.isNotBlank()) {
+                                PillButton(
+                                    label = stringResource(R.string.ui_media_ocr_label),
+                                    background = Surface2,
+                                    foreground = Ink,
+                                    onClick = { viewingOcr = true }
+                                )
+                            }
                         }
                     }
                 }
@@ -510,6 +531,43 @@ internal fun MediaViewerDialog(
             },
             dismissButton = {
                 TextButton(onClick = { confirmingDelete = false }) {
+                    Text(stringResource(R.string.ui_action_back))
+                }
+            }
+        )
+    }
+
+    if (viewingOcr) {
+        AlertDialog(
+            onDismissRequest = { viewingOcr = false },
+            title = { Text(stringResource(R.string.ui_media_ocr_label)) },
+            text = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        text = media.ocrText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Ink
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = Signal, contentColor = Color.White),
+                    onClick = {
+                        clipboard.setText(AnnotatedString(media.ocrText))
+                        viewingOcr = false
+                    }
+                ) {
+                    Text(stringResource(R.string.ui_media_ocr_copy))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewingOcr = false }) {
                     Text(stringResource(R.string.ui_action_back))
                 }
             }

@@ -240,4 +240,6 @@
     <string name="ui_share_saving">Guardando…</string>
     <string name="ui_share_failed">No se pudo leer la imagen</string>
     <string name="ui_share_mic_needed">Se necesita permiso de micrófono para grabar — imagen guardada.</string>
+    <string name="ui_media_ocr_label">Texto extraído</string>
+    <string name="ui_media_ocr_copy">Copiar texto</string>
 </resources>

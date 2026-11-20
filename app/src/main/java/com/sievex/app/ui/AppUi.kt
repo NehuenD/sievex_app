@@ -1832,6 +1832,7 @@ private fun SpaceScreen(
 
     val spaceNotes = allNotes.filter { it.spaceId == space.id }
     val spaceMedia = allMedia.filter { it.spaceId == space.id }
+    val hasReadableContext = spaceNotes.isNotEmpty() || spaceMedia.any { it.caption.isNotBlank() || it.ocrText.isNotBlank() }
     val feedEntries = remember(spaceNotes, spaceMedia) {
         (spaceNotes.map { FeedEntry.NoteEntry(it) } + spaceMedia.map { FeedEntry.MediaEntry(it) })
             .sortedByDescending { it.timestamp }
@@ -1842,7 +1843,7 @@ private fun SpaceScreen(
         ?: lenses.firstOrNull()?.id
     val selectedLens = lenses.firstOrNull { it.id == selectedId }
     val shown = artifact
-    val stale = shown != null && artifactIsStale(shown, spaceNotes)
+    val stale = shown != null && artifactIsStale(shown, spaceNotes, spaceMedia)
 
     // LensStore.resolve takes a store lock that a save can hold while it writes: never on the
     // frame thread.
@@ -1890,7 +1891,7 @@ private fun SpaceScreen(
     // this screen, locking the phone, or closing the app no longer cancels it, and the completion
     // notification is the signal that it is done.
     val generate: (LensSpec) -> Unit = { spec ->
-        if (runningLensId == null && spaceNotes.isNotEmpty()) {
+        if (runningLensId == null && hasReadableContext) {
             runningLensId = spec.id
             failedLensId = null
             LensService.start(context, space.id, spec.id)
@@ -2132,10 +2133,10 @@ private fun SpaceScreen(
                                 val busy = runningLensId != null
                                 PillButton(
                                     label = if (shown == null) stringResource(R.string.ui_lens_generate) else stringResource(R.string.ui_lens_regenerate),
-                                    background = if (busy || spaceNotes.isEmpty()) Surface2 else Signal,
-                                    foreground = if (busy || spaceNotes.isEmpty()) Ink2 else Color.White,
+                                    background = if (busy || !hasReadableContext) Surface2 else Signal,
+                                    foreground = if (busy || !hasReadableContext) Ink2 else Color.White,
                                     onClick = { generate(lens) },
-                                    enabled = !busy && spaceNotes.isNotEmpty()
+                                    enabled = !busy && hasReadableContext
                                 )
                                 if (runningLensId == lens.id) {
                                     Spacer(Modifier.height(12.dp))
@@ -2159,7 +2160,7 @@ private fun SpaceScreen(
                                         color = Red
                                     )
                                 }
-                                if (spaceNotes.isEmpty()) {
+                                if (!hasReadableContext) {
                                     Spacer(Modifier.height(10.dp))
                                     Text(
                                         stringResource(R.string.ui_lens_needs_notes),
@@ -2669,11 +2670,16 @@ private fun relativeAge(timestamp: Long): String {
  */
 private fun artifactIsStale(
     artifact: LensArtifact,
-    spaceNotes: List<NoteItem>
+    spaceNotes: List<NoteItem>,
+    spaceMedia: List<MediaItem>
 ): Boolean {
     if (spaceNotes.any { it.id !in artifact.covered }) return true
     val present = spaceNotes.mapTo(HashSet()) { it.id }
-    return artifact.covered.any { it !in present }
+    if (artifact.covered.any { it !in present }) return true
+    val readableMedia = spaceMedia.filter { it.caption.isNotBlank() || it.ocrText.isNotBlank() }
+    if (readableMedia.any { it.id !in artifact.coveredMedia }) return true
+    val presentMedia = readableMedia.mapTo(HashSet()) { it.id }
+    return artifact.coveredMedia.any { it !in presentMedia }
 }
 
 /**

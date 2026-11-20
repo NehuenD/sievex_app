@@ -28,7 +28,8 @@ data class LensArtifact(
     val body: String,          // markdown
     val covered: List<Long>,   // note ids
     val model: String,
-    val generatedAt: Long
+    val generatedAt: Long,
+    val coveredMedia: List<String> = emptyList()
 )
 
 /**
@@ -257,6 +258,14 @@ object SpaceStore {
                     val covered = mutableListOf<Long>()
                     val ca = o.optJSONArray("covered")
                     if (ca != null) for (j in 0 until ca.length()) covered.add(ca.optLong(j))
+                    val coveredMedia = mutableListOf<String>()
+                    val cm = o.optJSONArray("coveredMedia")
+                    if (cm != null) {
+                        for (j in 0 until cm.length()) {
+                            val mid = cm.optString(j)
+                            if (mid.isNotBlank()) coveredMedia.add(mid)
+                        }
+                    }
                     loadedArtifacts.add(
                         LensArtifact(
                             id = id,
@@ -265,7 +274,8 @@ object SpaceStore {
                             body = o.optString("body"),
                             covered = covered,
                             model = o.optString("model"),
-                            generatedAt = o.optLong("generatedAt")
+                            generatedAt = o.optLong("generatedAt"),
+                            coveredMedia = coveredMedia
                         )
                     )
                 }
@@ -355,6 +365,7 @@ object SpaceStore {
                         put("kind", a.kind)
                         put("body", a.body)
                         put("covered", JSONArray(a.covered))
+                        put("coveredMedia", JSONArray(a.coveredMedia))
                         put("model", a.model)
                         put("generatedAt", a.generatedAt)
                     }

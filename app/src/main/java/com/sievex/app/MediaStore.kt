@@ -30,7 +30,9 @@ data class MediaItem(
     val width: Int,
     val height: Int,
     val bytes: Long,
-    val sha256: String
+    val sha256: String,
+    val ocrText: String = "",
+    val ocrScanned: Boolean = false
 )
 
 /**
@@ -202,6 +204,8 @@ object MediaStore {
             return null
         }
 
+        val ocrText = OcrEngine.extractText(finalOriginal)
+
         val item = MediaItem(
             id = "md_" + UUID.randomUUID().toString().replace("-", "").take(12),
             spaceId = spaceId,
@@ -213,15 +217,41 @@ object MediaStore {
             width = width,
             height = height,
             bytes = totalBytes,
-            sha256 = sha256
+            sha256 = sha256,
+            ocrText = ocrText,
+            ocrScanned = true
         )
 
         synchronized(this) {
             items.add(0, item)
             save()
         }
-        CaptureLog.add("media: imported ${item.id} into $spaceId (${width}x${height})")
+        CaptureLog.add("media: imported ${item.id} into $spaceId (${width}x${height}, ocr=${ocrText.length} chars)")
         return item
+    }
+
+    /** Runs offline OCR on [id] if it has not been scanned yet, persisting the result. */
+    fun ensureOcr(id: String): MediaItem? {
+        val current = byId(id) ?: return null
+        if (current.ocrScanned) return current
+        val file = resolveFile(current.file) ?: return current
+        val text = OcrEngine.extractText(file)
+        synchronized(this) {
+            val i = items.indexOfFirst { it.id == id }
+            if (i < 0) return null
+            val updated = items[i].copy(ocrText = text, ocrScanned = true)
+            items[i] = updated
+            save()
+            return updated
+        }
+    }
+
+    /** Ensures every image in [spaceId] has been OCR-scanned before a Lens reads the space. */
+    fun ensureOcrForSpace(spaceId: String) {
+        val pending = synchronized(this) {
+            items.filter { it.spaceId == spaceId && !it.ocrScanned }.map { it.id }
+        }
+        pending.forEach { ensureOcr(it) }
     }
 
     @Synchronized
@@ -335,7 +365,9 @@ object MediaStore {
                         width = o.optInt("width", 0),
                         height = o.optInt("height", 0),
                         bytes = o.optLong("bytes", 0L),
-                        sha256 = o.optString("sha256")
+                        sha256 = o.optString("sha256"),
+                        ocrText = o.optString("ocrText"),
+                        ocrScanned = o.optBoolean("ocrScanned", false)
                     )
                 )
             }
@@ -384,6 +416,8 @@ object MediaStore {
                         put("height", m.height)
                         put("bytes", m.bytes)
                         put("sha256", m.sha256)
+                        put("ocrText", m.ocrText)
+                        put("ocrScanned", m.ocrScanned)
                     }
                 )
             }
