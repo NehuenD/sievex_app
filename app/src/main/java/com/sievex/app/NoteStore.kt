@@ -158,7 +158,8 @@ object NoteStore {
         val edited = note.copy(
             audioPath = existing.audioPath,
             spaceId = existing.spaceId,
-            editedAt = if (markEdited) System.currentTimeMillis() else existing.editedAt
+            editedAt = if (markEdited) System.currentTimeMillis() else existing.editedAt,
+            createdAt = existing.createdAt
         )
         notes[i] = edited
         save()

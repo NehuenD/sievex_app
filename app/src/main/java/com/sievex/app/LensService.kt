@@ -159,6 +159,7 @@ class LensService : Service() {
             NoteStore.init(filesDir)
             SpaceStore.init(filesDir)
             LensStore.init(filesDir)
+            MediaStore.init(filesDir)
 
             val space = SpaceStore.all().firstOrNull { it.id == spaceId }
             val spec = LensStore.byId(lensId)

@@ -169,7 +169,7 @@
     <string name="ui_lens_regenerate">Regenerate</string>
     <string name="ui_lens_working">Working in the background. You can leave this screen — we\'ll notify you when the report is ready.</string>
     <string name="ui_lens_failed">No report produced. Check the language model in Settings, then try again.</string>
-    <string name="ui_lens_needs_notes">A space needs at least one note before a lens can say anything.</string>
+    <string name="ui_lens_needs_notes">A space needs at least one note or readable image before a lens can say anything.</string>
     <string name="ui_lens_stale_hint">Notes changed since this was generated. Regenerate to bring it current.</string>
     <string name="ui_lens_none_title">NO LENSES ON THIS SPACE</string>
     <string name="ui_lens_none_body">A lens is one way of reading every note in this space: it picks the headings, reads the notes, and can be regenerated any time.</string>

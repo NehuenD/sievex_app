@@ -1832,7 +1832,7 @@ private fun SpaceScreen(
 
     val spaceNotes = allNotes.filter { it.spaceId == space.id }
     val spaceMedia = allMedia.filter { it.spaceId == space.id }
-    val hasReadableContext = spaceNotes.isNotEmpty() || spaceMedia.any { it.caption.isNotBlank() || it.ocrText.isNotBlank() }
+    val hasReadableContext = spaceNotes.isNotEmpty() || spaceMedia.any { it.caption.isNotBlank() || it.ocrText.isNotBlank() || !it.ocrScanned }
     val feedEntries = remember(spaceNotes, spaceMedia) {
         (spaceNotes.map { FeedEntry.NoteEntry(it) } + spaceMedia.map { FeedEntry.MediaEntry(it) })
             .sortedByDescending { it.timestamp }

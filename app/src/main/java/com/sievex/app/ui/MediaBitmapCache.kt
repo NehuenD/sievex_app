@@ -18,9 +18,15 @@ import kotlin.math.roundToInt
  */
 object MediaBitmapCache {
 
-    private const val MAX_CACHE_ENTRIES = 64
+    private const val MAX_CACHE_KB = 24 * 1024
 
-    private val cache = LruCache<String, ImageBitmap>(MAX_CACHE_ENTRIES)
+    private val cache = object : LruCache<String, ImageBitmap>(MAX_CACHE_KB) {
+        override fun sizeOf(key: String, value: ImageBitmap): Int {
+            return ((value.width.toLong() * value.height.toLong() * 4L) / 1024L)
+                .toInt()
+                .coerceAtLeast(1)
+        }
+    }
 
     suspend fun loadFile(file: File, maxDimensionPx: Int): ImageBitmap? {
         if (!file.isFile) return null

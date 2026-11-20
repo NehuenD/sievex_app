@@ -185,12 +185,15 @@ object MediaStore {
                 }
                 decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
             }
-            if (!finalThumb.exists() || finalThumb.length() == 0L) {
-                FileOutputStream(finalThumb).use { out ->
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+            try {
+                if (!finalThumb.exists() || finalThumb.length() == 0L) {
+                    FileOutputStream(finalThumb).use { out ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+                    }
                 }
+            } finally {
+                bitmap.recycle()
             }
-            bitmap.recycle()
             true
         }.getOrElse { e ->
             CaptureLog.add("media: decode failed - ${e.message}")
@@ -204,7 +207,7 @@ object MediaStore {
             return null
         }
 
-        val ocrText = OcrEngine.extractText(finalOriginal)
+        val ocrResult = OcrEngine.extractText(finalOriginal)
 
         val item = MediaItem(
             id = "md_" + UUID.randomUUID().toString().replace("-", "").take(12),
@@ -218,15 +221,15 @@ object MediaStore {
             height = height,
             bytes = totalBytes,
             sha256 = sha256,
-            ocrText = ocrText,
-            ocrScanned = true
+            ocrText = ocrResult ?: "",
+            ocrScanned = ocrResult != null
         )
 
         synchronized(this) {
             items.add(0, item)
             save()
         }
-        CaptureLog.add("media: imported ${item.id} into $spaceId (${width}x${height}, ocr=${ocrText.length} chars)")
+        CaptureLog.add("media: imported ${item.id} into $spaceId (${width}x${height}, ocr=${item.ocrText.length} chars)")
         return item
     }
 
@@ -235,7 +238,7 @@ object MediaStore {
         val current = byId(id) ?: return null
         if (current.ocrScanned) return current
         val file = resolveFile(current.file) ?: return current
-        val text = OcrEngine.extractText(file)
+        val text = OcrEngine.extractText(file) ?: return current
         synchronized(this) {
             val i = items.indexOfFirst { it.id == id }
             if (i < 0) return null

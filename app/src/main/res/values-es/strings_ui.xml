@@ -169,7 +169,7 @@
     <string name="ui_lens_regenerate">Regenerar</string>
     <string name="ui_lens_working">Trabajando en segundo plano. Puedes salir de esta pantalla: te avisamos cuando el informe esté listo.</string>
     <string name="ui_lens_failed">No se generó ningún informe. Revisa el modelo de lenguaje en Ajustes y vuelve a intentarlo.</string>
-    <string name="ui_lens_needs_notes">Un espacio necesita al menos una nota para que una lente pueda decir algo.</string>
+    <string name="ui_lens_needs_notes">Un espacio necesita al menos una nota o imagen legible para que una lente pueda decir algo.</string>
     <string name="ui_lens_stale_hint">Las notas cambiaron desde que se generó. Regenera para ponerlo al día.</string>
     <string name="ui_lens_none_title">SIN LENTES EN ESTE ESPACIO</string>
     <string name="ui_lens_none_body">Una lente es una forma de leer todas las notas de este espacio: elige los encabezados, lee las notas y se puede regenerar cuando quieras.</string>

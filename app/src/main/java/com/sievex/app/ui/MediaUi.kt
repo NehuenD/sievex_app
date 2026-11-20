@@ -1,6 +1,8 @@
 package com.sievex.app.ui
 
+import android.content.ClipData
 import android.content.Intent
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -64,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
+import com.sievex.app.CaptureLog
 import com.sievex.app.MediaItem
 import com.sievex.app.MediaStore
 import com.sievex.app.R
@@ -334,9 +337,12 @@ internal fun MediaViewerDialog(
                                     val share = Intent(Intent.ACTION_SEND).apply {
                                         type = "image/*"
                                         putExtra(Intent.EXTRA_STREAM, uri)
+                                        clipData = ClipData.newRawUri(null, uri)
                                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                     }
                                     context.startActivity(Intent.createChooser(share, null))
+                                }.onFailure { e ->
+                                    CaptureLog.add("media: share failed - ${e.message}")
                                 }
                             }
                         )
@@ -421,7 +427,9 @@ internal fun MediaViewerDialog(
                                 }
                         )
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             PillButton(

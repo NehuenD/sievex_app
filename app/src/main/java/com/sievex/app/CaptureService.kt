@@ -308,6 +308,8 @@ class CaptureService : Service() {
             isRecording = false
             recorder = null
             burstFormat = null
+            burstMediaIds = emptyList()
+            burstSpaceId = null
             CaptureLog.add("burst failed to start ($why)")
             return
         }

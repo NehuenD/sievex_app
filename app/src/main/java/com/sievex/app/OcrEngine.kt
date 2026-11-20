@@ -22,8 +22,9 @@ object OcrEngine {
         TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     }
 
-    fun extractText(file: File): String {
-        if (!file.isFile) return ""
+    /** Returns extracted text (possibly empty when no text is present), or null on error. */
+    fun extractText(file: File): String? {
+        if (!file.isFile) return null
         return runCatching {
             val source = ImageDecoder.createSource(file)
             val bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
@@ -52,7 +53,7 @@ object OcrEngine {
             }
         }.getOrElse { e ->
             CaptureLog.add("ocr: failed on ${file.name} - ${e.message}")
-            ""
+            null
         }
     }
 }
