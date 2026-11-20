@@ -28,7 +28,7 @@
     <string name="ui_space_new">New space</string>
     <string name="ui_space_create">Create space</string>
     <string name="ui_space_delete_title">Delete \"%1$s\"?</string>
-    <string name="ui_space_delete_body">Its reports are deleted with it. The notes inside are kept and move to No space.</string>
+    <string name="ui_space_delete_body">Its reports and images are deleted with it. The notes inside are kept and move to No space.</string>
     <string name="ui_space_delete_confirm">Delete space</string>
     <string name="ui_space_open_action">Open space</string>
     <string name="ui_space_none">No space</string>
@@ -169,7 +169,7 @@
     <string name="ui_lens_regenerate">Regenerate</string>
     <string name="ui_lens_working">Working in the background. You can leave this screen — we\'ll notify you when the report is ready.</string>
     <string name="ui_lens_failed">No report produced. Check the language model in Settings, then try again.</string>
-    <string name="ui_lens_needs_notes">A space needs at least one note before a lens can say anything.</string>
+    <string name="ui_lens_needs_notes">A space needs at least one note or readable image before a lens can say anything.</string>
     <string name="ui_lens_stale_hint">Notes changed since this was generated. Regenerate to bring it current.</string>
     <string name="ui_lens_none_title">NO LENSES ON THIS SPACE</string>
     <string name="ui_lens_none_body">A lens is one way of reading every note in this space: it picks the headings, reads the notes, and can be regenerated any time.</string>
@@ -209,4 +209,37 @@
     <!-- Status chips -->
     <string name="ui_stale">STALE</string>
 
+    <!-- Media / Spaces as context containers -->
+    <string name="ui_space_context_subtab">Context</string>
+    <string name="ui_space_add_image">Add image</string>
+    <string name="ui_space_empty_context">Nothing in this space yet — record a note or add an image.</string>
+    <string name="ui_media_count_one">1 image</string>
+    <string name="ui_media_count_many">%1$d images</string>
+    <string name="ui_media_links_one">1 note</string>
+    <string name="ui_media_links_many">%1$d notes</string>
+    <string name="ui_media_no_caption">No caption</string>
+    <string name="ui_media_caption_label">Context / caption</string>
+    <string name="ui_media_caption_hint">What is this image about?</string>
+    <string name="ui_media_viewer_title">Image</string>
+    <string name="ui_media_link_notes">Link notes</string>
+    <string name="ui_media_link_notes_title">Link to notes</string>
+    <string name="ui_media_link_notes_empty">No notes in this space yet.</string>
+    <string name="ui_media_share">Share</string>
+    <string name="ui_media_delete_title">Delete image?</string>
+    <string name="ui_media_delete_body">This removes the image from the space. Linked notes are kept.</string>
+    <string name="ui_media_delete_confirm">Delete image</string>
+    <string name="ui_note_images">Images</string>
+    <string name="ui_share_title">Save image to Sievex</string>
+    <string name="ui_share_count_many">%1$d images</string>
+    <string name="ui_share_space_label">Space</string>
+    <string name="ui_share_no_spaces">Create a space to file this image</string>
+    <string name="ui_share_new_space_hint">Space name</string>
+    <string name="ui_share_create_space">Create</string>
+    <string name="ui_share_save">Save</string>
+    <string name="ui_share_save_record">Save &amp; record</string>
+    <string name="ui_share_saving">Saving…</string>
+    <string name="ui_share_failed">Could not read image</string>
+    <string name="ui_share_mic_needed">Microphone permission is needed to record — saved image instead.</string>
+    <string name="ui_media_ocr_label">Extracted text</string>
+    <string name="ui_media_ocr_copy">Copy text</string>
 </resources>

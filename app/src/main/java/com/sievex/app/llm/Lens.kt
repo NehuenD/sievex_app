@@ -3,6 +3,7 @@ package com.sievex.app.llm
 import com.sievex.app.CaptureLog
 import com.sievex.app.LensArtifact
 import com.sievex.app.LensSpec
+import com.sievex.app.MediaItem
 import com.sievex.app.Space
 import com.sievex.app.SpaceStore
 import com.sievex.app.StoredNote
@@ -31,6 +32,8 @@ object Lens {
     private const val WHY_CHARS = 400
     private const val VERBATIM_CHARS = 400
     private const val ITEMS_CHARS = 400
+    private const val MEDIA_CAPTION_CHARS = 240
+    private const val MEDIA_OCR_CHARS = 500
 
     /** The user's own framing of the space: enough to steer the report, not enough to dominate it. */
     private const val DESCRIPTION_CHARS = 300
@@ -56,9 +59,10 @@ object Lens {
         space: Space,
         notes: List<StoredNote>,
         spec: LensSpec,
-        language: String = "en"
+        language: String = "en",
+        media: List<MediaItem> = emptyList()
     ): LensArtifact? =
-        runCatching { LlmGate.exclusive { generateUnsafe(filesDir, space, notes, spec, language) } }
+        runCatching { LlmGate.exclusive { generateUnsafe(filesDir, space, notes, media, spec, language) } }
             .onFailure { CaptureLog.add("lens ${spec.id}: failed - ${it.message}") }
             .getOrNull()
 
@@ -66,12 +70,14 @@ object Lens {
         filesDir: File,
         space: Space,
         notes: List<StoredNote>,
+        media: List<MediaItem>,
         spec: LensSpec,
         language: String
     ): LensArtifact? {
-        // Nothing to read: a report over zero notes could only be invented.
-        if (notes.isEmpty()) {
-            CaptureLog.add("lens ${spec.id}: no notes in ${space.id}")
+        val readableMedia = media.filter { it.caption.isNotBlank() || it.ocrText.isNotBlank() }
+        // Nothing to read: a report over zero notes and zero readable images could only be invented.
+        if (notes.isEmpty() && readableMedia.isEmpty()) {
+            CaptureLog.add("lens ${spec.id}: no notes or readable images in ${space.id}")
             return null
         }
 
@@ -82,10 +88,15 @@ object Lens {
 
         val started = System.currentTimeMillis()
         // No grammar here: unlike Transform, the reply is markdown, so sampling stays free-form.
-        val raw = LlamaBridge.complete(buildPrompt(space, notes, spec, language), MAX_TOKENS)
+        val raw = LlamaBridge.complete(buildPrompt(space, notes, readableMedia, spec, language), MAX_TOKENS)
         val ms = System.currentTimeMillis() - started
         CaptureLog.add(
-            "lens ${spec.id}: %d chars from %d notes in %d ms".format(raw.length, notes.size, ms)
+            "lens ${spec.id}: %d chars from %d notes, %d images in %d ms".format(
+                raw.length,
+                notes.size,
+                readableMedia.size,
+                ms
+            )
         )
 
         if (raw.isBlank()) {
@@ -104,7 +115,8 @@ object Lens {
             body = body,
             covered = notes.map { it.id },
             model = MODEL,
-            generatedAt = System.currentTimeMillis()
+            generatedAt = System.currentTimeMillis(),
+            coveredMedia = readableMedia.map { it.id }
         )
         SpaceStore.saveArtifact(artifact)
         return artifact
@@ -158,6 +170,7 @@ object Lens {
     private fun buildPrompt(
         space: Space,
         notes: List<StoredNote>,
+        media: List<MediaItem>,
         spec: LensSpec,
         language: String
     ): String =
@@ -176,8 +189,11 @@ object Lens {
             }
 
             append("Notes: ").append(notes.size).append('\n')
-            if (notes.size < 2) {
-                append("Only one note is in this space. Say that plainly in the first section")
+            if (media.isNotEmpty()) {
+                append("Images: ").append(media.size).append('\n')
+            }
+            if (notes.size + media.size < 2) {
+                append("Only one item is in this space. Say that plainly in the first section")
                 append(" and keep every other section to a line or two.\n")
             }
             append('\n')
@@ -199,9 +215,43 @@ object Lens {
                     .append(" not shown here.)\n")
             }
 
+            if (media.isNotEmpty()) {
+                val noteTitles = notes.associate { it.id to flat(it.title, TITLE_CHARS) }
+                var shownMedia = 0
+                for (item in media) {
+                    val block = mediaBlock(item, noteTitles)
+                    if (block.isEmpty()) continue
+                    if ((shown > 0 || shownMedia > 0) && used + block.length > PROMPT_BUDGET) break
+                    append(block).append('\n')
+                    used += block.length
+                    shownMedia++
+                }
+                val hiddenMedia = media.size - shownMedia
+                if (hiddenMedia > 0) {
+                    append("($hiddenMedia older ").append(if (hiddenMedia == 1) "image is" else "images are")
+                        .append(" not shown here.)\n")
+                }
+            }
+
             append("<|im_end|>\n")
             append("<|im_start|>assistant\n##")
         }
+
+    /** One image as a compact block carrying its caption, OCR text, and linked note titles. */
+    private fun mediaBlock(item: MediaItem, noteTitles: Map<Long, String>): String {
+        val caption = flat(item.caption, MEDIA_CAPTION_CHARS)
+        val ocr = flat(item.ocrText, MEDIA_OCR_CHARS)
+        if (caption.isEmpty() && ocr.isEmpty()) return ""
+        return buildString {
+            append("[Image]\n")
+            if (caption.isNotEmpty()) append("caption: ").append(caption).append('\n')
+            if (ocr.isNotEmpty()) append("text_in_image: ").append(ocr).append('\n')
+            val linked = item.noteIds.mapNotNull { noteTitles[it] }.filter { it.isNotEmpty() }
+            if (linked.isNotEmpty()) {
+                append("linked_notes: ").append(flat(linked.joinToString("; "), 200)).append('\n')
+            }
+        }
+    }
 
     /** One note as a compact, line-per-field block. */
     private fun noteBlock(note: StoredNote): String = buildString {

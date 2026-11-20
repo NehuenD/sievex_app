@@ -28,7 +28,7 @@
     <string name="ui_space_new">Nuevo espacio</string>
     <string name="ui_space_create">Crear espacio</string>
     <string name="ui_space_delete_title">¿Eliminar \"%1$s\"?</string>
-    <string name="ui_space_delete_body">Sus informes se eliminan con él. Las notas de dentro se conservan y pasan a Sin espacio.</string>
+    <string name="ui_space_delete_body">Sus informes e imágenes se eliminan con él. Las notas de dentro se conservan y pasan a Sin espacio.</string>
     <string name="ui_space_delete_confirm">Eliminar espacio</string>
     <string name="ui_space_open_action">Abrir espacio</string>
     <string name="ui_space_none">Sin espacio</string>
@@ -169,7 +169,7 @@
     <string name="ui_lens_regenerate">Regenerar</string>
     <string name="ui_lens_working">Trabajando en segundo plano. Puedes salir de esta pantalla: te avisamos cuando el informe esté listo.</string>
     <string name="ui_lens_failed">No se generó ningún informe. Revisa el modelo de lenguaje en Ajustes y vuelve a intentarlo.</string>
-    <string name="ui_lens_needs_notes">Un espacio necesita al menos una nota para que una lente pueda decir algo.</string>
+    <string name="ui_lens_needs_notes">Un espacio necesita al menos una nota o imagen legible para que una lente pueda decir algo.</string>
     <string name="ui_lens_stale_hint">Las notas cambiaron desde que se generó. Regenera para ponerlo al día.</string>
     <string name="ui_lens_none_title">SIN LENTES EN ESTE ESPACIO</string>
     <string name="ui_lens_none_body">Una lente es una forma de leer todas las notas de este espacio: elige los encabezados, lee las notas y se puede regenerar cuando quieras.</string>
@@ -209,4 +209,37 @@
     <!-- Status chips -->
     <string name="ui_stale">DESACTUALIZADO</string>
 
+    <!-- Media / Espacios como contenedores de contexto -->
+    <string name="ui_space_context_subtab">Contexto</string>
+    <string name="ui_space_add_image">Añadir imagen</string>
+    <string name="ui_space_empty_context">Nada en este espacio aún — graba una nota o añade una imagen.</string>
+    <string name="ui_media_count_one">1 imagen</string>
+    <string name="ui_media_count_many">%1$d imágenes</string>
+    <string name="ui_media_links_one">1 nota</string>
+    <string name="ui_media_links_many">%1$d notas</string>
+    <string name="ui_media_no_caption">Sin descripción</string>
+    <string name="ui_media_caption_label">Contexto / descripción</string>
+    <string name="ui_media_caption_hint">¿De qué trata esta imagen?</string>
+    <string name="ui_media_viewer_title">Imagen</string>
+    <string name="ui_media_link_notes">Vincular notas</string>
+    <string name="ui_media_link_notes_title">Vincular a notas</string>
+    <string name="ui_media_link_notes_empty">No hay notas en este espacio aún.</string>
+    <string name="ui_media_share">Compartir</string>
+    <string name="ui_media_delete_title">¿Eliminar imagen?</string>
+    <string name="ui_media_delete_body">Esto elimina la imagen del espacio. Las notas vinculadas se conservan.</string>
+    <string name="ui_media_delete_confirm">Eliminar imagen</string>
+    <string name="ui_note_images">Imágenes</string>
+    <string name="ui_share_title">Guardar imagen en Sievex</string>
+    <string name="ui_share_count_many">%1$d imágenes</string>
+    <string name="ui_share_space_label">Espacio</string>
+    <string name="ui_share_no_spaces">Crea un espacio para guardar esta imagen</string>
+    <string name="ui_share_new_space_hint">Nombre del espacio</string>
+    <string name="ui_share_create_space">Crear</string>
+    <string name="ui_share_save">Guardar</string>
+    <string name="ui_share_save_record">Guardar y grabar</string>
+    <string name="ui_share_saving">Guardando…</string>
+    <string name="ui_share_failed">No se pudo leer la imagen</string>
+    <string name="ui_share_mic_needed">Se necesita permiso de micrófono para grabar — imagen guardada.</string>
+    <string name="ui_media_ocr_label">Texto extraído</string>
+    <string name="ui_media_ocr_copy">Copiar texto</string>
 </resources>

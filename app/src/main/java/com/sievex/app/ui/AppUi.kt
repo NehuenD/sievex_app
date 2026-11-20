@@ -14,6 +14,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -109,6 +110,8 @@ import com.sievex.app.CaptureLog
 import com.sievex.app.CaptureService
 import com.sievex.app.Formats
 import com.sievex.app.LensArtifact
+import com.sievex.app.MediaItem
+import com.sievex.app.MediaStore
 import com.sievex.app.LensService
 import com.sievex.app.LensSpec
 import com.sievex.app.LensStore
@@ -156,7 +159,8 @@ data class NoteItem(
     /** How the note was shaped; see [NoteFormat]. Mirrors the stored id, never re-derived. */
     val format: String = NoteFormat.NOTE.id,
     /** The bullet or step list a LIST/STEPS note carries; empty for every other format. */
-    val items: List<String> = emptyList()
+    val items: List<String> = emptyList(),
+    val createdAt: Long = 0L
 )
 
 private val demoNotes = listOf(
@@ -221,6 +225,7 @@ private val demoNotes = listOf(
 private data class UiSnapshot(
     val notes: List<NoteItem>,
     val spaces: List<Space>,
+    val media: List<MediaItem>,
     val noteCounts: Map<String, Int>,
     val insights: Map<String, LensArtifact?>,
     val currentSpaceId: String?
@@ -245,10 +250,12 @@ private fun readSnapshot(): UiSnapshot {
                 spaceId = n.spaceId,
                 editedAt = n.editedAt,
                 format = n.format,
-                items = n.items
+                items = n.items,
+                createdAt = n.createdAt
             )
         },
         spaces = allSpaces,
+        media = MediaStore.all(),
         noteCounts = allSpaces.associate { it.id to SpaceStore.noteCount(it.id) },
         insights = allSpaces.associate { it.id to SpaceStore.latestFor(it.id, it.lensIds) },
         currentSpaceId = SpaceStore.currentSpaceId
@@ -480,9 +487,11 @@ fun SievexApp(
     var recording by remember { mutableStateOf(CaptureService.isRecording) }
     var notes by remember { mutableStateOf<List<NoteItem>>(emptyList()) }
     var spaces by remember { mutableStateOf<List<Space>>(emptyList()) }
+    var media by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var noteCounts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var insights by remember { mutableStateOf<Map<String, LensArtifact?>>(emptyMap()) }
     var currentSpaceId by remember { mutableStateOf<String?>(null) }
+    var openMediaId by remember { mutableStateOf<String?>(null) }
     var notifAccess by remember { mutableStateOf(false) }
     var pickingCurrentSpace by remember { mutableStateOf(false) }
     var namingNewSpace by remember { mutableStateOf(false) }
@@ -517,6 +526,7 @@ fun SievexApp(
     fun applySnapshot(snapshot: UiSnapshot) {
         notes = snapshot.notes
         spaces = snapshot.spaces
+        media = snapshot.media
         noteCounts = snapshot.noteCounts
         insights = snapshot.insights
         currentSpaceId = snapshot.currentSpaceId
@@ -657,10 +667,24 @@ fun SievexApp(
         )
         return
     }
+    val openMedia = media.firstOrNull { it.id == openMediaId }
+    if (openMedia != null) {
+        MediaViewerDialog(
+            media = openMedia,
+            spaceNotes = notes.filter { it.spaceId == openMedia.spaceId },
+            onDismiss = { openMediaId = null },
+            onMediaChanged = {
+                scope.launch { applySnapshot(withContext(Dispatchers.IO) { readSnapshot() }) }
+            }
+        )
+    }
+
     if (openNote != null) {
         NoteDetailScreen(
             note = openNote,
             spaces = spaces,
+            allMedia = media,
+            onOpenMedia = { openMediaId = it.id },
             onBack = { openNoteId = null },
             onEdit = { editingNoteId = openNote.id }
         )
@@ -672,12 +696,17 @@ fun SievexApp(
         SpaceScreen(
             space = openSpace,
             allNotes = notes,
+            allMedia = media,
             initialLensId = openSpaceLensId,
             onBack = {
                 openSpaceId = null
                 openSpaceLensId = null
             },
-            onOpenNote = { openNoteId = it.id }
+            onOpenNote = { openNoteId = it.id },
+            onOpenMedia = { openMediaId = it.id },
+            onMediaChanged = {
+                scope.launch { applySnapshot(withContext(Dispatchers.IO) { readSnapshot() }) }
+            }
         )
         return
     }
@@ -900,7 +929,7 @@ private fun ScreenHeader(title: String, subtitle: String? = null) {
 }
 
 @Composable
-private fun PillButton(
+internal fun PillButton(
     label: String,
     background: Color,
     foreground: Color,
@@ -1760,14 +1789,30 @@ private fun SpaceRow(
 private fun SpaceScreen(
     space: Space,
     allNotes: List<NoteItem>,
+    allMedia: List<MediaItem>,
     initialLensId: String? = null,
     onBack: () -> Unit,
-    onOpenNote: (NoteItem) -> Unit
+    onOpenNote: (NoteItem) -> Unit,
+    onOpenMedia: (MediaItem) -> Unit,
+    onMediaChanged: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var sub by remember(space.id) { mutableStateOf(0) }
     var editingSpace by remember(space.id) { mutableStateOf(false) }
+
+    val pickImages = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            scope.launch {
+                withContext(Dispatchers.IO) {
+                    uris.forEach { uri -> MediaStore.importFromUri(context, uri, space.id) }
+                }
+                onMediaChanged()
+            }
+        }
+    }
 
     // The lenses enabled on this space, resolved from `space.lensIds`. `lensEpoch` forces a
     // re-read after this screen writes a lens selection, so chips do not wait for the poll.
@@ -1786,13 +1831,19 @@ private fun SpaceScreen(
     var removingLens by remember(space.id) { mutableStateOf<LensSpec?>(null) }
 
     val spaceNotes = allNotes.filter { it.spaceId == space.id }
+    val spaceMedia = allMedia.filter { it.spaceId == space.id }
+    val hasReadableContext = spaceNotes.isNotEmpty() || spaceMedia.any { it.caption.isNotBlank() || it.ocrText.isNotBlank() || !it.ocrScanned }
+    val feedEntries = remember(spaceNotes, spaceMedia) {
+        (spaceNotes.map { FeedEntry.NoteEntry(it) } + spaceMedia.map { FeedEntry.MediaEntry(it) })
+            .sortedByDescending { it.timestamp }
+    }
     // A selection that no longer resolves (the lens was removed) falls back to the first chip
     // instead of leaving the tab blank with a dead chip highlighted.
     val selectedId = selectedLensId?.takeIf { id -> lenses.any { it.id == id } }
         ?: lenses.firstOrNull()?.id
     val selectedLens = lenses.firstOrNull { it.id == selectedId }
     val shown = artifact
-    val stale = shown != null && artifactIsStale(shown, spaceNotes)
+    val stale = shown != null && artifactIsStale(shown, spaceNotes, spaceMedia)
 
     // LensStore.resolve takes a store lock that a save can hold while it writes: never on the
     // frame thread.
@@ -1840,7 +1891,7 @@ private fun SpaceScreen(
     // this screen, locking the phone, or closing the app no longer cancels it, and the completion
     // notification is the signal that it is done.
     val generate: (LensSpec) -> Unit = { spec ->
-        if (runningLensId == null && spaceNotes.isNotEmpty()) {
+        if (runningLensId == null && hasReadableContext) {
             runningLensId = spec.id
             failedLensId = null
             LensService.start(context, space.id, spec.id)
@@ -1950,8 +2001,14 @@ private fun SpaceScreen(
                 overflow = TextOverflow.Ellipsis
             )
             Spacer(Modifier.height(4.dp))
+            val notesSummary = if (spaceNotes.size == 1) stringResource(R.string.ui_notes_count_one) else stringResource(R.string.ui_notes_count_many, spaceNotes.size)
+            val mediaSummary = when (spaceMedia.size) {
+                0 -> ""
+                1 -> " · " + stringResource(R.string.ui_media_count_one)
+                else -> " · " + stringResource(R.string.ui_media_count_many, spaceMedia.size)
+            }
             Text(
-                if (spaceNotes.size == 1) stringResource(R.string.ui_notes_count_one) else stringResource(R.string.ui_notes_count_many, spaceNotes.size),
+                notesSummary + mediaSummary,
                 style = MaterialTheme.typography.bodySmall,
                 color = Ink2
             )
@@ -1966,11 +2023,25 @@ private fun SpaceScreen(
         }
         Spacer(Modifier.height(14.dp))
         Row(
-            Modifier.padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            SubTab(stringResource(R.string.ui_tab_notes), sub == 0) { sub = 0 }
+            SubTab(stringResource(R.string.ui_space_context_subtab), sub == 0) { sub = 0 }
             SubTab(stringResource(R.string.ui_space_insights_subtab), sub == 1) { sub = 1 }
+            Spacer(Modifier.weight(1f))
+            if (sub == 0) {
+                PillButton(
+                    label = stringResource(R.string.ui_space_add_image),
+                    background = Surface2,
+                    foreground = Ink,
+                    onClick = {
+                        pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    }
+                )
+            }
         }
         Spacer(Modifier.height(12.dp))
 
@@ -1982,19 +2053,30 @@ private fun SpaceScreen(
                 contentPadding = PaddingValues(bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                if (spaceNotes.isEmpty()) {
+                if (feedEntries.isEmpty()) {
                     item {
                         Text(
-                            stringResource(R.string.ui_space_empty_notes),
+                            stringResource(R.string.ui_space_empty_context),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Ink2,
                             modifier = Modifier.padding(20.dp)
                         )
                     }
                 }
-                items(spaceNotes) { note ->
+                items(
+                    feedEntries,
+                    key = { entry ->
+                        when (entry) {
+                            is FeedEntry.NoteEntry -> "n_${entry.note.id}"
+                            is FeedEntry.MediaEntry -> "m_${entry.media.id}"
+                        }
+                    }
+                ) { entry ->
                     Box(Modifier.padding(horizontal = 20.dp)) {
-                        NoteCard(note, onClick = { onOpenNote(note) })
+                        when (entry) {
+                            is FeedEntry.NoteEntry -> NoteCard(entry.note, onClick = { onOpenNote(entry.note) })
+                            is FeedEntry.MediaEntry -> MediaCard(entry.media, onClick = { onOpenMedia(entry.media) })
+                        }
                     }
                 }
             }
@@ -2051,10 +2133,10 @@ private fun SpaceScreen(
                                 val busy = runningLensId != null
                                 PillButton(
                                     label = if (shown == null) stringResource(R.string.ui_lens_generate) else stringResource(R.string.ui_lens_regenerate),
-                                    background = if (busy || spaceNotes.isEmpty()) Surface2 else Signal,
-                                    foreground = if (busy || spaceNotes.isEmpty()) Ink2 else Color.White,
+                                    background = if (busy || !hasReadableContext) Surface2 else Signal,
+                                    foreground = if (busy || !hasReadableContext) Ink2 else Color.White,
                                     onClick = { generate(lens) },
-                                    enabled = !busy && spaceNotes.isNotEmpty()
+                                    enabled = !busy && hasReadableContext
                                 )
                                 if (runningLensId == lens.id) {
                                     Spacer(Modifier.height(12.dp))
@@ -2078,7 +2160,7 @@ private fun SpaceScreen(
                                         color = Red
                                     )
                                 }
-                                if (spaceNotes.isEmpty()) {
+                                if (!hasReadableContext) {
                                     Spacer(Modifier.height(10.dp))
                                     Text(
                                         stringResource(R.string.ui_lens_needs_notes),
@@ -2588,11 +2670,16 @@ private fun relativeAge(timestamp: Long): String {
  */
 private fun artifactIsStale(
     artifact: LensArtifact,
-    spaceNotes: List<NoteItem>
+    spaceNotes: List<NoteItem>,
+    spaceMedia: List<MediaItem>
 ): Boolean {
     if (spaceNotes.any { it.id !in artifact.covered }) return true
     val present = spaceNotes.mapTo(HashSet()) { it.id }
-    return artifact.covered.any { it !in present }
+    if (artifact.covered.any { it !in present }) return true
+    val readableMedia = spaceMedia.filter { it.caption.isNotBlank() || it.ocrText.isNotBlank() }
+    if (readableMedia.any { it.id !in artifact.coveredMedia }) return true
+    val presentMedia = readableMedia.mapTo(HashSet()) { it.id }
+    return artifact.coveredMedia.any { it !in presentMedia }
 }
 
 /**
@@ -2802,6 +2889,8 @@ private fun SettingRow(label: String, value: String, valueColor: Color) {
 private fun NoteDetailScreen(
     note: NoteItem,
     spaces: List<Space>,
+    allMedia: List<MediaItem>,
+    onOpenMedia: (MediaItem) -> Unit,
     onBack: () -> Unit,
     onEdit: () -> Unit
 ) {
@@ -2816,6 +2905,7 @@ private fun NoteDetailScreen(
     val copyLink = stringResource(R.string.common_link_copy)
     val spaceName = spaces.firstOrNull { it.id == note.spaceId }?.name
     val noteFormat = NoteFormat.from(note.format)
+    val noteMedia = remember(note.id, allMedia) { allMedia.filter { note.id in it.noteIds } }
 
     /**
      * Reruns one format over the words already stored. Only the model's fields are replaced, so
@@ -2998,6 +3088,9 @@ private fun NoteDetailScreen(
                     }
                 }
             }
+        }
+        if (noteMedia.isNotEmpty()) {
+            item { NoteMediaStrip(media = noteMedia, onOpenMedia = onOpenMedia) }
         }
         item {
             Surface(
@@ -3507,7 +3600,8 @@ private fun NewNoteScreen(
                     // Shaping that failed leaves a plain note, not a list-shaped note with no
                     // items: the format label should say what the note actually is.
                     format = if (shapeRequested && fields == null) NoteFormat.PLAIN.id else chosen.id,
-                    items = fields?.items ?: emptyList()
+                    items = fields?.items ?: emptyList(),
+                    createdAt = System.currentTimeMillis()
                 )
             )
             withContext(Dispatchers.Main) { onSaved() }

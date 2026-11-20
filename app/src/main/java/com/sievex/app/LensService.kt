@@ -159,6 +159,7 @@ class LensService : Service() {
             NoteStore.init(filesDir)
             SpaceStore.init(filesDir)
             LensStore.init(filesDir)
+            MediaStore.init(filesDir)
 
             val space = SpaceStore.all().firstOrNull { it.id == spaceId }
             val spec = LensStore.byId(lensId)
@@ -170,13 +171,16 @@ class LensService : Service() {
             }
 
             val notes = NoteStore.inSpace(space.id)
-            CaptureLog.add("lens: building $lensId on $spaceId, ${notes.size} note(s)")
+            MediaStore.ensureOcrForSpace(space.id)
+            val media = MediaStore.inSpace(space.id)
+            CaptureLog.add("lens: building $lensId on $spaceId, ${notes.size} note(s), ${media.size} image(s)")
             val artifact = Lens.generate(
                 filesDir,
                 space,
                 notes,
                 spec,
-                AppLocale.modelLanguage(this)
+                AppLocale.modelLanguage(this),
+                media = media
             )
             names = space.name to spec.name
             if (artifact != null) {
