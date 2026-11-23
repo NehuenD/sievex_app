@@ -1,5 +1,8 @@
 package com.sievex.app
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -236,8 +239,13 @@ object LensStore {
     /** Fixed ids, fixed order: the picker lists them as shipped. */
     private val BUILT_INS: List<LensSpec> =
         listOf(INSIGHT, BRAINSTORM, READING, ACTIONS, TENSIONS, TIMELINE)
+    private val BUILT_IN_BY_ID: Map<String, LensSpec> = BUILT_INS.associateBy { it.id }
+
+    private val _version = MutableStateFlow(0L)
+    val version: StateFlow<Long> = _version.asStateFlow()
 
     private val customs = mutableListOf<LensSpec>()
+    private val customById = LinkedHashMap<String, LensSpec>()
     private var file: File? = null
 
     /**
@@ -270,7 +278,7 @@ object LensStore {
 
     @Synchronized
     fun byId(id: String): LensSpec? =
-        BUILT_INS.firstOrNull { it.id == id } ?: customs.firstOrNull { it.id == id }
+        BUILT_IN_BY_ID[id] ?: customById[id]
 
     /**
      * Maps a space's `lensIds` to specs, in the user's order, dropping ids that no longer exist
@@ -279,9 +287,12 @@ object LensStore {
      */
     @Synchronized
     fun resolve(ids: List<String>): List<LensSpec> {
-        val pool = all().associateBy { it.id }
-        val out = LinkedHashMap<String, LensSpec>()
-        ids.forEach { id -> pool[id.trim()]?.let { out[it.id] = it } }
+        val out = LinkedHashMap<String, LensSpec>(ids.size * 2)
+        for (raw in ids) {
+            val key = raw.trim()
+            val spec = BUILT_IN_BY_ID[key] ?: customById[key] ?: continue
+            out[spec.id] = spec
+        }
         return out.values.toList()
     }
 
@@ -296,7 +307,7 @@ object LensStore {
     @Synchronized
     fun saveCustom(spec: LensSpec) {
         val clean = sanitize(spec) ?: return
-        if (BUILT_INS.any { it.id == clean.id }) {
+        if (clean.id in BUILT_IN_BY_ID) {
             CaptureLog.add("lenses: refused custom lens reusing built-in id ${clean.id}")
             return
         }
@@ -311,6 +322,7 @@ object LensStore {
         } else {
             customs.add(clean)
         }
+        customById[clean.id] = clean
         save()
         CaptureLog.add("lenses: saved custom ${clean.name} (${clean.id})")
     }
@@ -323,7 +335,7 @@ object LensStore {
     @Synchronized
     fun deleteCustom(id: String) {
         val key = id.trim()
-        if (BUILT_INS.any { it.id == key }) {
+        if (key in BUILT_IN_BY_ID) {
             CaptureLog.add("lenses: refused to delete built-in $key")
             return
         }
@@ -332,6 +344,7 @@ object LensStore {
             CaptureLog.add("lenses: delete, unknown custom lens $key")
             return
         }
+        customById.remove(key)
         save()
         CaptureLog.add("lenses: deleted custom $key")
     }
@@ -403,10 +416,14 @@ object LensStore {
         parsed.onSuccess { loaded ->
             customs.clear()
             customs.addAll(loaded)
+            customById.clear()
+            for (s in loaded) customById[s.id] = s
+            _version.value++
         }.onFailure { e ->
             CaptureLog.add("lenses: load failed - ${e.message}")
             quarantineUnreadable(f)
             customs.clear()
+            customById.clear()
         }
     }
 
@@ -424,39 +441,28 @@ object LensStore {
     @Synchronized
     private fun save() {
         val f = file ?: return
+        _version.value++
         if (writesBlocked) {
             CaptureLog.add("lenses: save skipped, file was left unreadable")
             return
         }
-        runCatching {
-            val arr = JSONArray()
-            customs.forEach { s ->
-                arr.put(
-                    JSONObject().apply {
-                        put("id", s.id)
-                        put("name", s.name)
-                        put("description", s.description)
-                        put("instruction", s.instruction)
-                        put("sections", JSONArray(s.sections))
-                    }
-                )
-            }
-            writeAtomic(f, arr.toString())
-        }.onFailure { CaptureLog.add("lenses: save failed - ${it.message}") }
-    }
-
-    /** Write through a temp file so a crash never leaves half a JSON array behind. */
-    private fun writeAtomic(target: File, text: String) {
-        val dir = target.parentFile
-        if (dir == null) {
-            target.writeText(text)
-            return
-        }
-        val tmp = File(dir, target.name + ".tmp")
-        tmp.writeText(text)
-        if (!tmp.renameTo(target)) {
-            target.writeText(text)
-            tmp.delete()
+        val snapshot = customs.toList()
+        StoreIo.executor.execute {
+            runCatching {
+                val arr = JSONArray()
+                snapshot.forEach { s ->
+                    arr.put(
+                        JSONObject().apply {
+                            put("id", s.id)
+                            put("name", s.name)
+                            put("description", s.description)
+                            put("instruction", s.instruction)
+                            put("sections", JSONArray(s.sections))
+                        }
+                    )
+                }
+                StoreIo.writeAtomic(f, arr.toString())
+            }.onFailure { CaptureLog.add("lenses: save failed - ${it.message}") }
         }
     }
 }

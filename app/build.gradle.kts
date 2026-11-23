@@ -27,6 +27,18 @@ android {
         }
     }
 
+    androidResources {
+        localeFilters += listOf("en", "es")
+    }
+
+    // ggml dynamic CPU backend loading (GGML_BACKEND_DL=ON) enumerates libggml-cpu-android_*.so
+    // on disk inside applicationInfo.nativeLibraryDir, which requires extractNativeLibs="true".
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     signingConfigs {
         create("release") {
             if (keystoreProps.isNotEmpty()) {
@@ -34,7 +46,7 @@ android {
                 storePassword = keystoreProps.getProperty("storePassword")
                 keyAlias = keystoreProps.getProperty("keyAlias")
                 keyPassword = keystoreProps.getProperty("keyPassword")
-                enableV1Signing = true
+                enableV1Signing = false
                 enableV2Signing = true
                 enableV3Signing = true
             }
@@ -43,7 +55,12 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig =
                 if (keystoreProps.isNotEmpty()) signingConfigs.getByName("release") else null
         }
@@ -66,7 +83,6 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("com.google.android.material:material:1.12.0")
 
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.compose.ui:ui:1.7.8")
@@ -74,7 +90,6 @@ dependencies {
     implementation("androidx.compose.material3:material3:1.3.1")
     implementation("androidx.compose.material:material-icons-core:1.7.8")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("androidx.documentfile:documentfile:1.0.1")
     implementation("com.google.mlkit:text-recognition:16.0.1")
     debugImplementation("androidx.compose.ui:ui-tooling:1.7.8")
 }

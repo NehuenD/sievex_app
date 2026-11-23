@@ -15,17 +15,45 @@ import java.nio.ByteOrder
 class WavWriter(private val file: File, private val sampleRate: Int) {
 
     private val raf = RandomAccessFile(file, "rw")
+    private val buffer = ByteArray(16 * 1024)
+    private var bufPos = 0
     private var dataBytes = 0
     private var closed = false
 
     init {
-        raf.setLength(0)
-        raf.write(header(0))
+        try {
+            raf.setLength(0)
+            raf.write(header(0))
+        } catch (t: Throwable) {
+            try {
+                raf.close()
+            } catch (_: Throwable) {
+            }
+            throw t
+        }
+    }
+
+    private fun flushBuffer() {
+        if (bufPos > 0) {
+            raf.write(buffer, 0, bufPos)
+            bufPos = 0
+        }
     }
 
     fun write(pcm: ByteArray, length: Int) {
-        if (closed) return
-        raf.write(pcm, 0, length)
+        if (closed || length <= 0) return
+        if (bufPos + length > buffer.size) {
+            flushBuffer()
+            if (length >= buffer.size) {
+                raf.write(pcm, 0, length)
+            } else {
+                System.arraycopy(pcm, 0, buffer, 0, length)
+                bufPos = length
+            }
+        } else {
+            System.arraycopy(pcm, 0, buffer, bufPos, length)
+            bufPos += length
+        }
         dataBytes += length
     }
 
@@ -33,6 +61,7 @@ class WavWriter(private val file: File, private val sampleRate: Int) {
         if (closed) return
         closed = true
         try {
+            flushBuffer()
             raf.seek(0)
             raf.write(header(dataBytes))
         } catch (_: Throwable) {

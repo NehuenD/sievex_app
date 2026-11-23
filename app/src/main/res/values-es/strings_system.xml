@@ -10,8 +10,9 @@
     <string name="sys_onboarding_step1_body">Toca grabar, di lo que tengas en mente y vuelve a tocar para parar. Se convierte en una nota sola.</string>
     <string name="sys_onboarding_step2_title">Nada sale de este teléfono</string>
     <string name="sys_onboarding_step2_body">La transcripción y la escritura se hacen en el dispositivo. Sin cuenta ni nube: nada de lo que grabas se sube.</string>
-    <string name="sys_onboarding_step3_title">Graba lo que tengas en mente</string>
-    <string name="sys_onboarding_step3_body">Lo transcribimos, sacamos qué significa y archivamos la nota con los hallazgos que elijas.</string>
+    <string name="sys_onboarding_step3_title">Organiza con Espacios y Lentes</string>
+    <string name="sys_onboarding_step3_body">Agrupa notas e imágenes en Espacios, aplica Lentes de IA sobre ellas y concede micrófono y notificaciones solo cuando los uses.</string>
+    <string name="sys_onboarding_permissions_hint">El micrófono se pide al grabar; las notificaciones mantienen visibles los informes y capturas en segundo plano.</string>
     <string name="sys_onboarding_action_continue">Continuar</string>
     <string name="sys_onboarding_action_get_started">Empezar</string>
     <string name="sys_onboarding_skip">Saltar</string>
@@ -57,5 +58,19 @@
     <string name="sys_model_starting_download">Iniciando descarga</string>
     <string name="sys_model_verifying">Verificando</string>
     <string name="sys_model_download_failed">Error en la descarga: %1$s</string>
+
+    <!-- Acceso rápido y widget de pantalla de inicio -->
+    <string name="sys_tile_label">Capturar</string>
+    <string name="sys_tile_idle">Toca para grabar</string>
+    <string name="sys_tile_recording">Grabando · Toca para parar</string>
+    <string name="sys_widget_label">Captura rápida Sievex</string>
+    <string name="sys_widget_description">Inicia o detiene una nota de voz local con un toque</string>
+    <string name="sys_widget_idle">Toca para capturar</string>
+    <string name="sys_widget_recording">Grabando · Toca para parar</string>
+
+    <!-- Recordatorios locales -->
+    <string name="sys_reminder_channel_name">Recordatorios</string>
+    <string name="sys_reminder_note_title">Recordatorio · Nota</string>
+    <string name="sys_reminder_media_title">Recordatorio · Captura</string>
 
 </resources>

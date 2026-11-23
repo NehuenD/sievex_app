@@ -6,6 +6,7 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.io.File
+import java.util.concurrent.TimeUnit
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -42,7 +43,7 @@ object OcrEngine {
             }
             try {
                 val image = InputImage.fromBitmap(bitmap, 0)
-                val result = Tasks.await(recognizer.process(image))
+                val result = Tasks.await(recognizer.process(image), 20, TimeUnit.SECONDS)
                 result.text
                     .lines()
                     .map { it.trim() }

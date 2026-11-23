@@ -3,6 +3,7 @@ package com.sievex.app
 import android.content.ComponentName
 import android.media.MediaMetadata
 import android.media.session.MediaController
+import android.media.session.MediaSession
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Handler
@@ -18,7 +19,7 @@ class MediaWatcher : NotificationListenerService() {
     private var msm: MediaSessionManager? = null
     private val handler = Handler(Looper.getMainLooper())
     private val lastState = HashMap<String, Int>()
-    private val attached = HashSet<String>()
+    private val registrations = HashMap<MediaSession.Token, Pair<MediaController, MediaController.Callback>>()
 
     private val activeListener =
         MediaSessionManager.OnActiveSessionsChangedListener { list -> attach(list) }
@@ -42,31 +43,64 @@ class MediaWatcher : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         CaptureLog.add("media listener disconnected")
+        cleanupRegistrations()
+    }
+
+    override fun onDestroy() {
+        cleanupRegistrations()
+        super.onDestroy()
+    }
+
+    private fun cleanupRegistrations() {
         try {
             msm?.removeOnActiveSessionsChangedListener(activeListener)
         } catch (_: Exception) {
         }
-        attached.clear()
+        for ((_, pair) in registrations) {
+            runCatching { pair.first.unregisterCallback(pair.second) }
+        }
+        registrations.clear()
+        lastState.clear()
     }
 
     private fun attach(list: List<MediaController>?) {
         if (list == null) return
         CaptureLog.add("sessions: ${list.size}")
+        val activeTokens = list.mapTo(HashSet()) { it.sessionToken }
+        val stale = registrations.keys.filter { it !in activeTokens }
+        for (token in stale) {
+            registrations.remove(token)?.let { (ctrl, cb) ->
+                runCatching { ctrl.unregisterCallback(cb) }
+            }
+        }
+
         for (controller in list) {
+            val token = controller.sessionToken
+            if (token in registrations) continue
             val pkg = controller.packageName
-            if (!attached.add(pkg)) continue
             CaptureLog.add("attach $pkg")
-            controller.registerCallback(object : MediaController.Callback() {
+            val cb = object : MediaController.Callback() {
                 override fun onPlaybackStateChanged(state: PlaybackState?) {
                     handle(pkg, state)
                 }
 
                 override fun onMetadataChanged(metadata: MediaMetadata?) {
-                    val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
-                    val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
-                    CaptureLog.add("meta $pkg: $title — $artist")
+                    if (CaptureService.armed || CaptureService.isRecording) {
+                        val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+                        val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+                        CaptureLog.add("meta $pkg: $title — $artist")
+                    }
                 }
-            }, handler)
+
+                override fun onSessionDestroyed() {
+                    registrations.remove(token)?.let { (ctrl, callback) ->
+                        runCatching { ctrl.unregisterCallback(callback) }
+                    }
+                    lastState.remove(pkg)
+                }
+            }
+            controller.registerCallback(cb, handler)
+            registrations[token] = controller to cb
             handle(pkg, controller.playbackState)
         }
     }
@@ -76,12 +110,20 @@ class MediaWatcher : NotificationListenerService() {
         val s = state.state
         val prev = lastState[pkg]
         if (prev == s) return
-        lastState[pkg] = s
-        CaptureLog.add("state $pkg -> ${name(s)} pos=${state.position}")
+        // Podcast players frequently pass through STATE_BUFFERING between PAUSED and PLAYING;
+        // keep the pre-buffering state so a PAUSED -> BUFFERING -> PLAYING resume still stops capture.
+        if (s != PlaybackState.STATE_BUFFERING) {
+            lastState[pkg] = s
+        }
+        if (CaptureService.armed || CaptureService.isRecording) {
+            CaptureLog.add("state $pkg -> ${name(s)} pos=${state.position}")
+        }
 
         if (prev == PlaybackState.STATE_PLAYING && s == PlaybackState.STATE_PAUSED) {
             CaptureService.trigger(true, "pause in $pkg")
-        } else if (prev == PlaybackState.STATE_PAUSED && s == PlaybackState.STATE_PLAYING) {
+        } else if (s == PlaybackState.STATE_PLAYING &&
+            (prev == PlaybackState.STATE_PAUSED || CaptureService.isRecording)
+        ) {
             CaptureService.trigger(false, "resume in $pkg")
         }
     }

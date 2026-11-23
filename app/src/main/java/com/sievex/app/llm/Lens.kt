@@ -32,18 +32,28 @@ object Lens {
     private const val WHY_CHARS = 400
     private const val VERBATIM_CHARS = 400
     private const val ITEMS_CHARS = 400
+    private const val FOLLOWUPS_CHARS = 400
     private const val MEDIA_CAPTION_CHARS = 240
     private const val MEDIA_OCR_CHARS = 500
 
     /** The user's own framing of the space: enough to steer the report, not enough to dominate it. */
     private const val DESCRIPTION_CHARS = 300
+    private const val FOCUS_PROMPT_CHARS = 400
 
     /**
      * The native side sizes its context from the prompt (`n_ctx = prompt tokens + maxTokens`),
      * so a long prompt is a long KV cache on a phone. ~6000 characters is roughly 1500 tokens:
      * room for a dozen or so notes, cheap enough to run without paging out the model.
      */
-    private const val PROMPT_BUDGET = 6_000
+    private const val PROMPT_BUDGET = 7_500
+
+    private val WHITESPACE_REGEX = Regex("\\s+")
+    private val EXTRA_HEADING_HASHES_REGEX = Regex("(?m)^#{3,}[ \\t]*")
+    private val TIGHT_HEADING_REGEX = Regex("(?m)^##(?=[^#\\s])")
+    private val CITATION_TAG_REGEX = Regex("""\s*\[\s*n\s*\d+\s*]""")
+    private val EMPTY_PARENS_REGEX = Regex("""\(\s*\)""")
+    private val SPACE_BEFORE_PUNCT_REGEX = Regex("""[ \t]+([;:,.!?])""")
+    private val MULTI_SPACE_REGEX = Regex("""[ \t]{2,}""")
 
     /**
      * Runs one LLM pass over [notes] as [spec] reads them, and saves the result as an artifact
@@ -81,8 +91,20 @@ object Lens {
             return null
         }
 
+        if (!LlamaBridge.ensureBackendsInitialized()) {
+            val detail = LlamaBridge.lastError()
+            CaptureLog.add(
+                if (detail.isNotBlank()) "lens ${spec.id}: backend init failed - $detail"
+                else "lens ${spec.id}: backend init failed"
+            )
+            return null
+        }
         if (!LlamaBridge.nativeLoad(TransformModel.modelFile(filesDir).absolutePath)) {
-            CaptureLog.add("lens ${spec.id}: load failed")
+            val detail = LlamaBridge.lastError()
+            CaptureLog.add(
+                if (detail.isNotBlank()) "lens ${spec.id}: load failed - $detail"
+                else "lens ${spec.id}: load failed"
+            )
             return null
         }
 
@@ -100,7 +122,11 @@ object Lens {
         )
 
         if (raw.isBlank()) {
-            CaptureLog.add("lens ${spec.id}: empty reply")
+            val detail = LlamaBridge.lastError()
+            CaptureLog.add(
+                if (detail.isNotBlank()) "lens ${spec.id}: empty reply - $detail"
+                else "lens ${spec.id}: empty reply"
+            )
             return null
         }
 
@@ -116,7 +142,8 @@ object Lens {
             covered = notes.map { it.id },
             model = MODEL,
             generatedAt = System.currentTimeMillis(),
-            coveredMedia = readableMedia.map { it.id }
+            coveredMedia = readableMedia.map { it.id },
+            focusPrompt = space.focusPrompt.trim()
         )
         SpaceStore.saveArtifact(artifact)
         return artifact
@@ -130,23 +157,30 @@ object Lens {
      * instruction already spells out this exact ordered list — every built-in does — the clause
      * is skipped, so the model is never shown two competing copies of the same outline.
      */
-    private fun systemPrompt(spec: LensSpec, language: String): String {
-        val instruction = spec.instruction.trim()
-        val base = instruction + headingClause(instruction, sections(spec))
+    private fun systemPrompt(spec: LensSpec, language: String, focusPrompt: String): String {
+        val instruction = sanitizeChatMl(spec.instruction).trim()
+        val cleanSections = sections(spec)
+        val base = instruction + headingClause(instruction, cleanSections)
+        val focus = flat(focusPrompt, FOCUS_PROMPT_CHARS)
+        val withFocus = if (focus.isNotEmpty()) {
+            base + "\n\nSpace focus (prioritize this angle throughout every section; look for insights, patterns, and connections aligned with it):\n" + focus
+        } else {
+            base
+        }
         // The instructions stay English (they are tuned), the report does not. The heading list
         // above is English too, so Spanish asks for a translation of it, order preserved.
         return if (language == "es") {
-            base + "\n\nWrite the whole report in Spanish, including the section headings: " +
+            withFocus + "\n\nWrite the whole report in Spanish, including the section headings: " +
                 "translate each heading, keep the order and the number of sections, and add none."
         } else {
-            base
+            withFocus
         }
     }
 
     /** Trimmed, non-blank, de-duplicated heading names, original order kept. */
     private fun sections(spec: LensSpec): List<String> =
         spec.sections
-            .map { it.trim().removePrefix("##").trim() }
+            .map { sanitizeChatMl(it).trim().removePrefix("##").trim() }
             .filter { it.isNotEmpty() }
             .distinct()
 
@@ -176,7 +210,7 @@ object Lens {
     ): String =
         buildString {
             append("<|im_start|>system\n")
-            append(systemPrompt(spec, language))
+            append(systemPrompt(spec, language, space.focusPrompt))
             append("<|im_end|>\n")
             append("<|im_start|>user\n")
             append("Space: ").append(flat(space.name, TITLE_CHARS).ifBlank { "Untitled space" })
@@ -198,7 +232,7 @@ object Lens {
             }
             append('\n')
 
-            var used = 0
+            var used = length
             var shown = 0
             for (note in notes) {
                 val block = noteBlock(note)
@@ -272,13 +306,21 @@ object Lens {
 
         val said = flat(note.verbatim, VERBATIM_CHARS)
         if (said.isNotEmpty()) append("said: ").append(said).append('\n')
+
+        if (note.followUps.isNotEmpty()) {
+            val thread = flat(note.followUps.joinToString(" | ") { it.text }, FOLLOWUPS_CHARS)
+            if (thread.isNotEmpty()) append("follow_ups: ").append(thread).append('\n')
+        }
     }
 
-    /** Collapses whitespace so every field stays on one line, then trims to [max] characters. */
+    /** Collapses whitespace and strips ChatML delimiters, then trims to [max] characters. */
     private fun flat(text: String, max: Int): String {
-        val one = text.replace(Regex("\\s+"), " ").trim()
+        val one = sanitizeChatMl(text).replace(WHITESPACE_REGEX, " ").trim()
         return if (one.length <= max) one else one.take(max - 1).trimEnd() + "\u2026"
     }
+
+    private fun sanitizeChatMl(text: String): String =
+        text.replace("<|im_start|>", "").replace("<|im_end|>", "")
 
     /**
      * The prompt ends in `##`, so the reply is the remainder of the first heading. Repair the
@@ -289,8 +331,8 @@ object Lens {
      */
     private fun assemble(raw: String): String {
         var body = "##" + raw.trimStart('\n').trimEnd()
-        body = body.replace(Regex("(?m)^#{3,}[ \\t]*"), "## ")
-        body = body.replace(Regex("(?m)^##(?=[^#\\s])"), "## ")
+        body = body.replace(EXTRA_HEADING_HASHES_REGEX, "## ")
+        body = body.replace(TIGHT_HEADING_REGEX, "## ")
         body = body.replace("<|im_end|>", "").replace("<|im_start|>", "")
         return body.trim()
     }
@@ -303,9 +345,9 @@ object Lens {
     fun stripCitations(text: String): String {
         if (text.isBlank()) return text
         return text
-            .replace(Regex("""\s*\[\s*n\s*\d+\s*]"""), "")
-            .replace(Regex("""\(\s*\)"""), "")
-            .replace(Regex("""[ \t]+([;:,.!?])""")) { it.groupValues[1] }
-            .replace(Regex("""[ \t]{2,}"""), " ")
+            .replace(CITATION_TAG_REGEX, "")
+            .replace(EMPTY_PARENS_REGEX, "")
+            .replace(SPACE_BEFORE_PUNCT_REGEX) { it.groupValues[1] }
+            .replace(MULTI_SPACE_REGEX, " ")
     }
 }

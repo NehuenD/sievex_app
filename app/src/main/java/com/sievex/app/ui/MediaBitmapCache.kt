@@ -28,11 +28,17 @@ object MediaBitmapCache {
         }
     }
 
+    @Volatile
+    private var lastViewer: Pair<String, ImageBitmap>? = null
+
+    fun peekFile(file: File, maxDimensionPx: Int): ImageBitmap? =
+        cache.get("${file.absolutePath}@$maxDimensionPx")
+
     suspend fun loadFile(file: File, maxDimensionPx: Int): ImageBitmap? {
-        if (!file.isFile) return null
         val key = "${file.absolutePath}@$maxDimensionPx"
         cache.get(key)?.let { return it }
         return withContext(Dispatchers.IO) {
+            if (!file.isFile) return@withContext null
             cache.get(key)?.let { return@withContext it }
             runCatching {
                 val src = ImageDecoder.createSource(file)
@@ -41,6 +47,27 @@ object MediaBitmapCache {
                 cache.put(key, bmp)
             }
         }
+    }
+
+    /** Loads a full-size viewer image without evicting card thumbnails from the LRU cache. */
+    suspend fun loadViewerFile(file: File, maxDimensionPx: Int): ImageBitmap? {
+        val key = "${file.absolutePath}@$maxDimensionPx"
+        lastViewer?.let { (cachedKey, bmp) -> if (cachedKey == key) return bmp }
+        return withContext(Dispatchers.IO) {
+            if (!file.isFile) return@withContext null
+            lastViewer?.let { (cachedKey, bmp) -> if (cachedKey == key) return@withContext bmp }
+            runCatching {
+                val src = ImageDecoder.createSource(file)
+                decodeScaled(src, maxDimensionPx)
+            }.getOrNull()?.also { bmp ->
+                lastViewer = key to bmp
+            }
+        }
+    }
+
+    fun clear() {
+        cache.evictAll()
+        lastViewer = null
     }
 
     suspend fun loadUri(context: Context, uri: Uri, maxDimensionPx: Int): ImageBitmap? {
@@ -54,6 +81,9 @@ object MediaBitmapCache {
 
     private fun decodeScaled(source: ImageDecoder.Source, maxDimensionPx: Int): ImageBitmap {
         val bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+            if (maxDimensionPx in 1..480) {
+                decoder.memorySizePolicy = ImageDecoder.MEMORY_POLICY_LOW_RAM
+            }
             val w = info.size.width
             val h = info.size.height
             val longest = max(w, h)

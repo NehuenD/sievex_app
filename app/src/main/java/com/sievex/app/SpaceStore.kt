@@ -1,5 +1,8 @@
 package com.sievex.app
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -12,6 +15,11 @@ data class Space(
     val createdAt: Long,
     /** The user's own words about what this space is for. Never derived from the notes. */
     val description: String = "",
+    /**
+     * Optional AI steering prompt for this space: focuses Lens reports and note
+     * follow-up question drafts onto a specific angle, goal, or intersection.
+     */
+    val focusPrompt: String = "",
     /**
      * The lenses enabled on this space, in the order the user picked them. Lens ids, not
      * artifacts: each id names one report kind, and every (space, lens) pair owns its own
@@ -29,7 +37,9 @@ data class LensArtifact(
     val covered: List<Long>,   // note ids
     val model: String,
     val generatedAt: Long,
-    val coveredMedia: List<String> = emptyList()
+    val coveredMedia: List<String> = emptyList(),
+    /** Snapshot of [Space.focusPrompt] at generation time so changes mark the report stale. */
+    val focusPrompt: String = ""
 )
 
 /**
@@ -40,9 +50,13 @@ data class LensArtifact(
  */
 object SpaceStore {
 
+    private val _version = MutableStateFlow(0L)
+    val version: StateFlow<Long> = _version.asStateFlow()
+
     private val spaces = mutableListOf<Space>()
     private val artifacts = mutableListOf<LensArtifact>()
     private var file: File? = null
+    private var currentFile: File? = null
 
     @Volatile
     private var current: String? = null
@@ -70,21 +84,32 @@ object SpaceStore {
      */
     var currentSpaceId: String?
         get() = current
+        @Synchronized
         set(value) {
             if (current == value) return
             current = value
-            save()
+            _version.value++
+            saveCurrentOnly()
         }
 
     @Synchronized
     fun init(root: File) {
         if (file != null) return
         file = File(root, "spaces.json")
+        currentFile = File(root, "current_space.txt")
         load()
     }
 
     @Synchronized
     fun all(): List<Space> = spaces.toList()
+
+    /** Returns `(spaceName, focusPrompt)` for [spaceId], falling back to description if no explicit focus is set. */
+    @Synchronized
+    fun focusFor(spaceId: String?): Pair<String, String> {
+        if (spaceId.isNullOrBlank()) return "" to ""
+        val space = spaces.firstOrNull { it.id == spaceId } ?: return "" to ""
+        return space.name to space.focusPrompt.ifBlank { space.description }
+    }
 
     @Synchronized
     fun create(name: String): Space {
@@ -154,6 +179,7 @@ object SpaceStore {
         val edited = existing.copy(
             name = space.name.trim().ifBlank { existing.name },
             description = space.description.trim(),
+            focusPrompt = space.focusPrompt.trim(),
             lensIds = cleanLensIds(space.lensIds)
         )
         if (edited == existing) return
@@ -170,6 +196,11 @@ object SpaceStore {
     @Synchronized
     fun artifacts(spaceId: String): List<LensArtifact> =
         artifacts.filter { it.spaceId == spaceId }.sortedByDescending { it.generatedAt }
+
+    /** All generated lens artifacts across every space, newest first. */
+    @Synchronized
+    fun allArtifacts(): List<LensArtifact> =
+        artifacts.sortedByDescending { it.generatedAt }
 
     @Synchronized
     fun latest(spaceId: String, kind: String): LensArtifact? =
@@ -191,6 +222,28 @@ object SpaceStore {
     }
 
     /**
+     * Single-pass lookup for every space's newest active artifact, avoiding N separate scans
+     * across [artifacts] when refreshing the UI snapshot.
+     */
+    @Synchronized
+    fun latestBySpace(spaces: List<Space>): Map<String, LensArtifact?> {
+        if (spaces.isEmpty() || artifacts.isEmpty()) return emptyMap()
+        val wantedBySpace = HashMap<String, Set<String>>(spaces.size * 2)
+        for (s in spaces) {
+            if (s.lensIds.isNotEmpty()) wantedBySpace[s.id] = s.lensIds.toSet()
+        }
+        if (wantedBySpace.isEmpty()) return emptyMap()
+        val best = HashMap<String, LensArtifact>(spaces.size * 2)
+        for (a in artifacts) {
+            val wanted = wantedBySpace[a.spaceId] ?: continue
+            if (a.kind !in wanted) continue
+            val prev = best[a.spaceId]
+            if (prev == null || a.generatedAt > prev.generatedAt) best[a.spaceId] = a
+        }
+        return best
+    }
+
+    /**
      * Removes every artifact of one kind across every space with a single save. Called when a
      * custom lens is deleted, so its reports cannot linger as orphans no space can ever show.
      */
@@ -201,6 +254,22 @@ object SpaceStore {
         artifacts.removeAll { it.kind == kind }
         save()
         CaptureLog.add("spaces: removed $removed $kind artifact(s)")
+    }
+
+    /**
+     * Permanently removes one custom lens from every space and deletes all of its artifacts in
+     * a single atomic save.
+     */
+    @Synchronized
+    fun removeLensEverywhere(lensId: String) {
+        var changed = artifacts.removeAll { it.kind == lensId }
+        for (i in spaces.indices) {
+            if (lensId in spaces[i].lensIds) {
+                spaces[i] = spaces[i].copy(lensIds = spaces[i].lensIds - lensId)
+                changed = true
+            }
+        }
+        if (changed) save()
     }
 
     @Synchronized
@@ -242,6 +311,7 @@ object SpaceStore {
                             name = o.optString("name", "Untitled space"),
                             createdAt = o.optLong("createdAt"),
                             description = o.optString("description"),
+                            focusPrompt = o.optString("focusPrompt"),
                             lensIds = lensIdsOf(o)
                         )
                     )
@@ -275,13 +345,19 @@ object SpaceStore {
                             covered = covered,
                             model = o.optString("model"),
                             generatedAt = o.optLong("generatedAt"),
-                            coveredMedia = coveredMedia
+                            coveredMedia = coveredMedia,
+                            focusPrompt = o.optString("focusPrompt")
                         )
                     )
                 }
             }
         }.onSuccess {
-            current = loadedCurrent
+            val cf = currentFile
+            current = if (cf != null && cf.exists()) {
+                runCatching { cf.readText().trim().ifBlank { null } }.getOrDefault(loadedCurrent)
+            } else {
+                loadedCurrent
+            }
             spaces.clear()
             spaces.addAll(loadedSpaces)
             artifacts.clear()
@@ -289,6 +365,7 @@ object SpaceStore {
             // A current space that no longer exists is the same as no current space.
             if (current != null && spaces.none { it.id == current }) current = null
             loadBroken = false
+            _version.value++
         }.onFailure { e ->
             CaptureLog.add("spaces: load failed - ${e.message}")
             quarantineUnreadable(f)
@@ -331,64 +408,72 @@ object SpaceStore {
         return ids.distinct()
     }
 
-    @Synchronized
-    private fun save() {
-        val f = file ?: return
+    private fun saveCurrentOnly() {
+        val cf = currentFile ?: return
         if (writesBlocked) {
             CaptureLog.add("spaces: save skipped, file was left unreadable")
             return
         }
-        runCatching {
-            val root = JSONObject()
-            root.put("current", current ?: "")
-
-            val sa = JSONArray()
-            spaces.forEach { s ->
-                sa.put(
-                    JSONObject().apply {
-                        put("id", s.id)
-                        put("name", s.name)
-                        put("createdAt", s.createdAt)
-                        put("description", s.description)
-                        put("lensIds", JSONArray(s.lensIds))
-                    }
-                )
-            }
-            root.put("spaces", sa)
-
-            val aa = JSONArray()
-            artifacts.forEach { a ->
-                aa.put(
-                    JSONObject().apply {
-                        put("id", a.id)
-                        put("spaceId", a.spaceId)
-                        put("kind", a.kind)
-                        put("body", a.body)
-                        put("covered", JSONArray(a.covered))
-                        put("coveredMedia", JSONArray(a.coveredMedia))
-                        put("model", a.model)
-                        put("generatedAt", a.generatedAt)
-                    }
-                )
-            }
-            root.put("artifacts", aa)
-
-            writeAtomic(f, root.toString())
-        }.onFailure { CaptureLog.add("spaces: save failed - ${it.message}") }
+        val value = current ?: ""
+        StoreIo.executor.execute {
+            runCatching { StoreIo.writeAtomic(cf, value) }
+                .onFailure { CaptureLog.add("spaces: save current failed - ${it.message}") }
+        }
     }
 
-    /** Write through a temp file so a crash never leaves half a JSON object behind. */
-    private fun writeAtomic(target: File, text: String) {
-        val dir = target.parentFile
-        if (dir == null) {
-            target.writeText(text)
+    @Synchronized
+    private fun save() {
+        val f = file ?: return
+        _version.value++
+        if (writesBlocked) {
+            CaptureLog.add("spaces: save skipped, file was left unreadable")
             return
         }
-        val tmp = File(dir, target.name + ".tmp")
-        tmp.writeText(text)
-        if (!tmp.renameTo(target)) {
-            target.writeText(text)
-            tmp.delete()
+        val currentSnap = current ?: ""
+        val spacesSnap = spaces.toList()
+        val artifactsSnap = artifacts.toList()
+        val cf = currentFile
+        StoreIo.executor.execute {
+            runCatching {
+                val root = JSONObject()
+                root.put("current", currentSnap)
+
+                val sa = JSONArray()
+                spacesSnap.forEach { s ->
+                    sa.put(
+                        JSONObject().apply {
+                            put("id", s.id)
+                            put("name", s.name)
+                            put("createdAt", s.createdAt)
+                            put("description", s.description)
+                            put("focusPrompt", s.focusPrompt)
+                            put("lensIds", JSONArray(s.lensIds))
+                        }
+                    )
+                }
+                root.put("spaces", sa)
+
+                val aa = JSONArray()
+                artifactsSnap.forEach { a ->
+                    aa.put(
+                        JSONObject().apply {
+                            put("id", a.id)
+                            put("spaceId", a.spaceId)
+                            put("kind", a.kind)
+                            put("body", a.body)
+                            put("covered", JSONArray(a.covered))
+                            put("coveredMedia", JSONArray(a.coveredMedia))
+                            put("model", a.model)
+                            put("generatedAt", a.generatedAt)
+                            put("focusPrompt", a.focusPrompt)
+                        }
+                    )
+                }
+                root.put("artifacts", aa)
+
+                StoreIo.writeAtomic(f, root.toString())
+                if (cf != null) StoreIo.writeAtomic(cf, currentSnap)
+            }.onFailure { CaptureLog.add("spaces: save failed - ${it.message}") }
         }
     }
 }

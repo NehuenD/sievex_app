@@ -14,6 +14,10 @@ import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.sievex.app.llm.Lens
+import com.sievex.app.llm.LlamaBridge
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -63,9 +67,17 @@ class LensService : Service() {
         super.attachBaseContext(AppLocale.wrap(newBase))
     }
 
+    private var generation = 0L
+
     override fun onCreate() {
         super.onCreate()
-        instance = this
+        LlamaBridge.setNativeLibDir(applicationInfo.nativeLibraryDir)
+        synchronized(lifeLock) {
+            instance = this
+            activeGeneration++
+            generation = activeGeneration
+            pending = 0
+        }
         // Both channels exist before the first startForeground: on Android 12+ the notification
         // is what keeps the process alive, and creating its channel afterwards would race it.
         ensureChannels()
@@ -78,7 +90,7 @@ class LensService : Service() {
         if (intent == null || intent.action != ACTION_RUN) {
             // Nothing was asked of this start, so nothing is worth keeping the service for.
             CaptureLog.add("lens: unknown action, stopping")
-            stopSelf()
+            if (!isRunning()) stopSelf()
             return START_NOT_STICKY
         }
 
@@ -86,7 +98,7 @@ class LensService : Service() {
         val lensId = intent.getStringExtra(EXTRA_LENS_ID)?.trim()
         if (spaceId.isNullOrEmpty() || lensId.isNullOrEmpty()) {
             CaptureLog.add("lens: run without ids, stopping")
-            stopSelf()
+            if (!isRunning()) stopSelf()
             return START_NOT_STICKY
         }
 
@@ -105,25 +117,33 @@ class LensService : Service() {
             // not sit on RUNNING waiting for a run that will never happen.
             failQuietly(spaceId, lensId)
             CaptureLog.add("lens: startForeground refused - ${raised.exceptionOrNull()?.message}")
-            stopSelf()
+            if (!isRunning()) stopSelf()
             return START_NOT_STICKY
         }
 
-        if (!begin(spaceId, lensId)) {
+        if (!begin(spaceId, lensId, generation)) {
             // One report per pair: the run already in flight will notify for this request too,
             // and it owns the foreground slot and the counter.
             CaptureLog.add("lens: $lensId on $spaceId already running")
             return START_NOT_STICKY
         }
 
-        val submitted = runCatching { worker.execute { generate(spaceId, lensId) } }
+        val gen = generation
+        val submitted = runCatching { worker.execute { generate(spaceId, lensId, gen) } }
         if (submitted.isFailure) {
             // The executor only refuses when it is shutting down, which means this instance is
             // being destroyed: publish the failure rather than leaving the pair RUNNING.
             CaptureLog.add("lens: worker refused - ${submitted.exceptionOrNull()?.message}")
-            finish(spaceId, lensId, RunState.FAILED)
+            finish(spaceId, lensId, RunState.FAILED, gen)
         }
         return START_NOT_STICKY
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        CaptureLog.add("lens: dataSync FGS timeout (startId=$startId)")
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        super.onTimeout(startId, fgsType)
     }
 
     override fun onDestroy() {
@@ -132,11 +152,10 @@ class LensService : Service() {
         // shutdown(), not shutdownNow(): a report that is already building is allowed to finish
         // and file its artifact. Only new submissions are refused, and none are coming.
         if (::worker.isInitialized) worker.shutdown()
-        // The counter describes live work, and this instance's work is no longer counted. A run
-        // still in flight clamps the decrement and skips the stop, because it is not this
-        // instance's stop to make any more.
-        synchronized(lifeLock) { pending = 0 }
-        if (instance === this) instance = null
+        synchronized(lifeLock) {
+            if (activeGeneration == generation) pending = 0
+            if (instance === this) instance = null
+        }
         CaptureLog.add("lens: service destroyed")
         super.onDestroy()
     }
@@ -150,7 +169,7 @@ class LensService : Service() {
      * The finally block is the only place that publishes an outcome, so a thrown generation can
      * never leave a pair stuck at [RunState.RUNNING].
      */
-    private fun generate(spaceId: String, lensId: String) {
+    private fun generate(spaceId: String, lensId: String, gen: Long) {
         var outcome = RunState.FAILED
         // Only known once the stores are loaded. A pair that stayed null never got far enough to
         // name itself, and the request is then failed silently instead of announced.
@@ -195,14 +214,16 @@ class LensService : Service() {
             names?.let { (spaceName, lensName) ->
                 postResult(spaceId, lensId, spaceName, lensName, outcome == RunState.DONE)
             }
-            finish(spaceId, lensId, outcome)
+            finish(spaceId, lensId, outcome, gen)
         }
     }
 
     /** Publishes [outcome] for the pair and hands the foreground slot back when it was the last. */
-    private fun finish(spaceId: String, lensId: String, outcome: RunState) {
-        states[keyOf(spaceId, lensId)] = outcome
+    private fun finish(spaceId: String, lensId: String, outcome: RunState, gen: Long) {
         val last = synchronized(lifeLock) {
+            states[keyOf(spaceId, lensId)] = outcome
+            _version.value++
+            if (gen != activeGeneration) return
             if (pending > 0) pending--
             pending == 0
         }
@@ -215,6 +236,7 @@ class LensService : Service() {
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             CaptureLog.add("lens: stopped")
+            CaptureService.requestIdleLlmUnload()
         }
     }
 
@@ -346,12 +368,16 @@ class LensService : Service() {
         /** Last observed state per "$spaceId/$lensId", readable without holding the service. */
         private val states = ConcurrentHashMap<String, RunState>()
 
+        private val _version = MutableStateFlow(0L)
+        val version: StateFlow<Long> = _version.asStateFlow()
+
         /**
          * Queued plus executing runs, guarded by [lifeLock]. The foreground slot is handed back
          * only at zero, so a second report queued behind the first cannot have it taken away.
          */
         private val lifeLock = Any()
         private var pending = 0
+        private var activeGeneration = 0L
 
         /** The live instance, so a report finishing after teardown cannot stop a later one. */
         @Volatile
@@ -373,7 +399,10 @@ class LensService : Service() {
         private fun failQuietly(spaceId: String, lensId: String) {
             val key = keyOf(spaceId, lensId)
             synchronized(lifeLock) {
-                if (states[key] != RunState.RUNNING) states[key] = RunState.FAILED
+                if (states[key] != RunState.RUNNING) {
+                    states[key] = RunState.FAILED
+                    _version.value++
+                }
             }
         }
 
@@ -381,13 +410,14 @@ class LensService : Service() {
          * Claims the pair and counts the run. False means that pair is already running, and the
          * duplicate is dropped rather than queued twice.
          */
-        private fun begin(spaceId: String, lensId: String): Boolean {
+        private fun begin(spaceId: String, lensId: String, gen: Long): Boolean {
             val key = keyOf(spaceId, lensId)
             return synchronized(lifeLock) {
-                if (states[key] == RunState.RUNNING) {
+                if (gen != activeGeneration || states[key] == RunState.RUNNING) {
                     false
                 } else {
                     states[key] = RunState.RUNNING
+                    _version.value++
                     pending++
                     true
                 }

@@ -23,8 +23,9 @@
 #   use. There is no runtime error when this is wrong, only a slower benchmark.
 #
 # ENV:
-#   ARM_ARCH         -march for ggml's CPU backend, or "baseline" / "" for generic armv8-a
-#                    (default: armv8.2-a+dotprod+i8mm)
+#   BACKEND_DL       set to 1 (default) to build dynamic CPU backend variants (armv8.0..armv9.2),
+#                    or 0 for a single static-CPU libggml-cpu.so controlled by ARM_ARCH
+#   ARM_ARCH         when BACKEND_DL=0: -march for ggml's CPU backend, or "baseline" / ""
 #   OUT              output directory for stripped .so files (default: spike/prebuilt/<variant>)
 #   INSTALL_JNILIBS  set to 1 to also copy stripped libs into app/src/main/jniLibs/arm64-v8a
 #   SYNC_HEADERS     set to 1 to update spike/llama-headers/ and UPSTREAM_COMMIT from spike/llama.cpp
@@ -40,13 +41,17 @@ JNILIBS="$HERE/../app/src/main/jniLibs/arm64-v8a"
 
 SDK=${SDK:-"$HOME/AppData/Local/Android/Sdk"}
 NDK=${NDK:-}
-ARM_ARCH=${ARM_ARCH:-armv8.2-a+dotprod+i8mm}
+BACKEND_DL=${BACKEND_DL:-1}
+ARM_ARCH=${ARM_ARCH:-baseline}
 INSTALL_JNILIBS=${INSTALL_JNILIBS:-0}
 SYNC_HEADERS=${SYNC_HEADERS:-0}
-KLEIDIAI=${KLEIDIAI:-0}
+KLEIDIAI=${KLEIDIAI:-1}
 JOBS=${JOBS:-8}
 
-if [ -z "$ARM_ARCH" ] || [ "$ARM_ARCH" = "baseline" ]; then
+if [ "$BACKEND_DL" = "1" ]; then
+  VARIANT="dl"
+  BUILD="$SRC/build-android-arm64-dl"
+elif [ -z "$ARM_ARCH" ] || [ "$ARM_ARCH" = "baseline" ]; then
   ARM_ARCH=""
   VARIANT="baseline"
   BUILD="$SRC/build-android-arm64"
@@ -60,9 +65,12 @@ fi
 
 OUT=${OUT:-"$HERE/prebuilt/$VARIANT"}
 
-# The four libraries llama_jni.cpp links against (see spike/build-llm-jni.sh). Anything else the
-# build produces (Vulkan, RPC, ...) is deliberately not copied into the APK.
-LIBS="libllama.so libggml.so libggml-base.so libggml-cpu.so"
+# The shared libraries shipped into the APK.
+if [ "$BACKEND_DL" = "1" ]; then
+  LIBS="libllama.so libggml.so libggml-base.so libggml-cpu-android_armv8.0_1.so libggml-cpu-android_armv8.2_1.so libggml-cpu-android_armv8.2_2.so libggml-cpu-android_armv8.6_1.so libggml-cpu-android_armv9.0_1.so libggml-cpu-android_armv9.2_1.so libggml-cpu-android_armv9.2_2.so"
+else
+  LIBS="libllama.so libggml.so libggml-base.so libggml-cpu.so"
+fi
 
 log() { printf '%s\n' "$*"; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
@@ -163,13 +171,16 @@ log "   OUT      : $OUT"
 
 # Expanded unquoted on purpose: it is a list of flags and the value contains no spaces.
 EXTRA_ARGS=""
-if [ -n "$ARM_ARCH" ]; then
+if [ "$BACKEND_DL" = "1" ]; then
+  EXTRA_ARGS="-DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON"
+elif [ -n "$ARM_ARCH" ]; then
   EXTRA_ARGS="-DGGML_CPU_ARM_ARCH=$ARM_ARCH"
 fi
 if [ "$KLEIDIAI" = "1" ]; then
   # Needs network access at configure time: ggml's CMake FetchContent clones KleidiAI then.
-  # An offline configure fails here, which is why this is opt-in rather than the default.
   EXTRA_ARGS="$EXTRA_ARGS -DGGML_CPU_KLEIDIAI=ON"
+else
+  EXTRA_ARGS="$EXTRA_ARGS -DGGML_CPU_KLEIDIAI=OFF"
 fi
 
 # Configure on every run. The arch flag is the entire reason to run this script, and a cached
@@ -191,9 +202,11 @@ cmake -S "$SRC" -B "$BUILD" -G Ninja \
 
 # A ggml too old to know GGML_CPU_ARM_ARCH ignores it with only a CMake notice, and the build
 # would silently stay on baseline armv8-a. Say so loudly instead of shipping slow kernels.
-if [ -n "$ARM_ARCH" ] && [ -f "$BUILD/CMakeCache.txt" ]; then
-  grep -q '^GGML_CPU_ARM_ARCH:' "$BUILD/CMakeCache.txt" \
-    || warn "this llama.cpp/ggml has no GGML_CPU_ARM_ARCH option; the build is baseline armv8-a"
+if [ -f "$BUILD/CMakeCache.txt" ]; then
+  if [ -n "$ARM_ARCH" ]; then
+    grep -q '^GGML_CPU_ARM_ARCH:' "$BUILD/CMakeCache.txt" \
+      || warn "this llama.cpp/ggml has no GGML_CPU_ARM_ARCH option; the build is baseline armv8-a"
+  fi
   if [ "$KLEIDIAI" = "1" ]; then
     grep -q '^GGML_CPU_KLEIDIAI:' "$BUILD/CMakeCache.txt" \
       || warn "this ggml has no GGML_CPU_KLEIDIAI option; KleidiAI kernels were not built"
@@ -203,9 +216,16 @@ fi
 # --- build -----------------------------------------------------------------
 
 log "== building (-j $JOBS) =="
-# Build only the four shared libraries llama_jni.cpp links against; a bare build also tries to
-# link bin/llama, which fails when -DLLAMA_BUILD_SERVER=OFF disables llama-server-impl.
-cmake --build "$BUILD" --target llama ggml ggml-base ggml-cpu -j "$JOBS"
+# Build only the shared libraries llama_jni.cpp and ggml dynamic loading use; a bare build also
+# tries to link bin/llama, which fails when -DLLAMA_BUILD_SERVER=OFF disables llama-server-impl.
+if [ "$BACKEND_DL" = "1" ]; then
+  cmake --build "$BUILD" --target llama ggml ggml-base \
+    ggml-cpu-android_armv8.0_1 ggml-cpu-android_armv8.2_1 ggml-cpu-android_armv8.2_2 \
+    ggml-cpu-android_armv8.6_1 ggml-cpu-android_armv9.0_1 ggml-cpu-android_armv9.2_1 \
+    ggml-cpu-android_armv9.2_2 -j "$JOBS"
+else
+  cmake --build "$BUILD" --target llama ggml ggml-base ggml-cpu -j "$JOBS"
+fi
 
 # --- copy into the APK's jniLibs ------------------------------------------
 

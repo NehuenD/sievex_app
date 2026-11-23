@@ -13,7 +13,9 @@ data class Job(
     /** The format chosen when the burst started; jobs from older files default to a note. */
     val format: String = NoteFormat.NOTE.id,
     /** Media items to link to the filed note once transcription + shaping finishes. */
-    val mediaIds: List<String> = emptyList()
+    val mediaIds: List<String> = emptyList(),
+    /** When non-null, append this transcribed burst as a follow-up to an existing note. */
+    val appendNoteId: Long? = null
 )
 
 /**
@@ -28,6 +30,9 @@ object JobQueue {
     private val jobs = mutableListOf<Job>()
     private var file: File? = null
 
+    @Volatile
+    private var writesBlocked = false
+
     @Synchronized
     fun init(root: File) {
         if (file != null) return
@@ -39,6 +44,16 @@ object JobQueue {
     fun add(job: Job) {
         val i = jobs.indexOfFirst { it.id == job.id }
         if (i >= 0) jobs[i] = job else jobs.add(job)
+        save()
+    }
+
+    @Synchronized
+    fun addAll(newJobs: List<Job>) {
+        if (newJobs.isEmpty()) return
+        for (job in newJobs) {
+            val i = jobs.indexOfFirst { it.id == job.id }
+            if (i >= 0) jobs[i] = job else jobs.add(job)
+        }
         save()
     }
 
@@ -99,16 +114,35 @@ object JobQueue {
                         format = o.optString("format", NoteFormat.NOTE.id)
                             .takeIf { candidate -> NoteFormat.entries.any { it.id == candidate } }
                             ?: NoteFormat.NOTE.id,
-                        mediaIds = mediaIds
+                        mediaIds = mediaIds,
+                        appendNoteId = o.optLong("appendNoteId", 0L).takeIf { it > 0L }
                     )
                 )
             }
-        }.onFailure { CaptureLog.add("jobs: load failed - ${it.message}") }
+        }.onFailure {
+            CaptureLog.add("jobs: load failed - ${it.message}")
+            quarantineUnreadable(f)
+            jobs.clear()
+        }
+    }
+
+    private fun quarantineUnreadable(bad: File) {
+        val target = File(bad.parentFile, bad.name + ".corrupt-" + System.currentTimeMillis())
+        if (bad.renameTo(target)) {
+            CaptureLog.add("jobs: moved unreadable file to ${target.name}")
+        } else {
+            writesBlocked = true
+            CaptureLog.add("jobs: could not move ${bad.name} aside, saving disabled")
+        }
     }
 
     @Synchronized
     private fun save() {
         val f = file ?: return
+        if (writesBlocked) {
+            CaptureLog.add("jobs: save skipped, file was left unreadable")
+            return
+        }
         runCatching {
             val arr = JSONArray()
             jobs.forEach { j ->
@@ -120,6 +154,7 @@ object JobQueue {
                         put("attempts", j.attempts)
                         put("format", j.format)
                         if (j.mediaIds.isNotEmpty()) put("mediaIds", JSONArray(j.mediaIds))
+                        if (j.appendNoteId != null) put("appendNoteId", j.appendNoteId)
                     }
                 )
             }
@@ -135,7 +170,11 @@ object JobQueue {
             return
         }
         val tmp = File(dir, target.name + ".tmp")
-        tmp.writeText(text)
+        java.io.FileOutputStream(tmp).use { out ->
+            out.write(text.toByteArray(Charsets.UTF_8))
+            out.flush()
+            out.fd.sync()
+        }
         if (!tmp.renameTo(target)) {
             target.writeText(text)
             tmp.delete()
