@@ -1,5 +1,7 @@
 package com.sievex.app.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -14,13 +16,13 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,14 +30,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -44,21 +49,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -81,20 +90,22 @@ import com.sievex.app.asr.ModelInstaller
 import com.sievex.app.llm.TransformModel
 import kotlinx.coroutines.delay
 import java.util.Locale
+import kotlin.math.PI
+import kotlin.math.sin
 
 @Composable
 internal fun ModelSetupCard() {
     val context = LocalContext.current
     Surface(
         color = Surface1,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, Blue.copy(alpha = 0.45f)),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
-            .border(1.dp, Blue.copy(alpha = 0.45f), RoundedCornerShape(24.dp))
     ) {
-        Column(Modifier.padding(18.dp)) {
-            Text(stringResource(R.string.ui_speech_model), style = MaterialTheme.typography.labelSmall, color = Blue)
+        Column(Modifier.padding(16.dp)) {
+            Text(stringResource(R.string.ui_speech_model), style = MaterialTheme.typography.labelSmall, color = BlueText)
             Spacer(Modifier.height(8.dp))
             Text(
                 "${stringResource(R.string.ui_speech_model_blurb)} ${stringResource(R.string.ui_record_wifi_hint)}",
@@ -140,13 +151,13 @@ internal fun TransformSetupCard() {
     val context = LocalContext.current
     Surface(
         color = Surface1,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, Mint.copy(alpha = 0.45f)),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
-            .border(1.dp, Mint.copy(alpha = 0.45f), RoundedCornerShape(24.dp))
     ) {
-        Column(Modifier.padding(18.dp)) {
+        Column(Modifier.padding(16.dp)) {
             Text(stringResource(R.string.ui_transform_model), style = MaterialTheme.typography.labelSmall, color = Mint)
             Spacer(Modifier.height(8.dp))
             Text(
@@ -176,7 +187,7 @@ internal fun TransformSetupCard() {
                 PillButton(
                     label = stringResource(R.string.ui_transform_model_download),
                     background = Mint,
-                    foreground = Color(0xFF00382F),
+                    foreground = OnMint,
                     onClick = { TransformModel.download(context) }
                 )
                 if (TransformModel.failed) {
@@ -188,23 +199,208 @@ internal fun TransformSetupCard() {
     }
 }
 
+/**
+ * Slim editorial Capture Strip docked directly above the 3-tab bottom spine.
+ */
 @Composable
-internal fun RecordScreen(
+internal fun CaptureStrip(
+    spaceName: String?,
     armed: Boolean,
     recording: Boolean,
     notifAccess: Boolean,
     modelsReady: Boolean,
-    onToggle: () -> Unit,
+    onPickSpace: () -> Unit,
+    onOpenSheet: () -> Unit,
+    onQuickRecord: () -> Unit
+) {
+    var elapsed by remember { mutableIntStateOf(0) }
+    LaunchedEffect(recording) {
+        if (!recording) {
+            elapsed = 0
+            return@LaunchedEffect
+        }
+        val base = CaptureService.recordingStartedAt.takeIf { it > 0L } ?: System.currentTimeMillis()
+        while (true) {
+            val spentMs = (System.currentTimeMillis() - base).coerceAtLeast(0L)
+            val sec = (spentMs / 1000L).toInt()
+            elapsed = sec
+            val nextSecMs = (sec + 1) * 1000L
+            delay((nextSecMs - spentMs).coerceAtLeast(16L))
+        }
+    }
+
+    val stage = Pipeline.stage
+    val resolvedSpace = spaceName ?: stringResource(R.string.ui_record_space_inbox)
+    val processing = stage == PipelineStage.TRANSCRIBING || stage == PipelineStage.TRANSFORMING
+
+    Surface(
+        color = Surface1,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column {
+            HorizontalDivider(thickness = 1.dp, color = Line)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .clickable { onOpenSheet() }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Active Space serif pill
+                Surface(
+                    onClick = onPickSpace,
+                    color = if (spaceName != null) BlueSoft else Surface2,
+                    shape = RoundedCornerShape(999.dp),
+                    border = BorderStroke(1.dp, if (spaceName != null) Blue.copy(alpha = 0.42f) else Line),
+                    modifier = Modifier
+                        .heightIn(min = 36.dp)
+                        .widthIn(max = 112.dp)
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = resolvedSpace,
+                            style = MaterialTheme.typography.labelMedium.copy(fontFamily = EditorialSerif),
+                            color = if (spaceName != null) BlueText else Ink2,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                // Quick tap area showing live status or prompt
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    val promptText = when {
+                        recording -> stringResource(R.string.ui_capture_strip_recording, formatDuration(elapsed))
+                        stage == PipelineStage.TRANSCRIBING -> stringResource(R.string.ui_record_stage_transcribing)
+                        stage == PipelineStage.TRANSFORMING -> pipelineStepLabel(Pipeline.step)
+                        stage == PipelineStage.DONE -> Pipeline.lastTitle.ifBlank { stringResource(R.string.ui_record_note_ready) }
+                        !modelsReady -> stringResource(R.string.ui_record_subtitle_setup)
+                        else -> stringResource(R.string.ui_capture_strip_prompt)
+                    }
+                    val promptColor = when {
+                        recording -> SignalText
+                        processing -> BlueText
+                        stage == PipelineStage.DONE -> Mint
+                        else -> Ink2
+                    }
+                    Text(
+                        text = promptText,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = if (recording) EditorialMono else MaterialTheme.typography.bodySmall.fontFamily
+                        ),
+                        color = promptColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                // Inline Podcast arm badge when armed
+                if (armed) {
+                    Surface(
+                        onClick = onOpenSheet,
+                        color = if (notifAccess) BlueSoft else Amber.copy(alpha = 0.14f),
+                        shape = RoundedCornerShape(999.dp),
+                        border = BorderStroke(1.dp, if (notifAccess) Blue.copy(alpha = 0.42f) else Amber.copy(alpha = 0.45f)),
+                        modifier = Modifier.heightIn(min = 34.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            PodcastSignalGlyph(
+                                active = true,
+                                color = if (notifAccess) BlueText else Amber,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = stringResource(R.string.ui_record_podcast_armed_short),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (notifAccess) BlueText else Amber,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+
+                // Terracotta REC / STOP pill
+                Surface(
+                    onClick = {
+                        if (!modelsReady) onOpenSheet() else onQuickRecord()
+                    },
+                    enabled = !processing,
+                    color = if (recording) RedFill else SignalFill,
+                    shape = RoundedCornerShape(999.dp),
+                    modifier = Modifier
+                        .heightIn(min = 38.dp)
+                        .alpha(if (processing) 0.5f else 1f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            Modifier
+                                .size(8.dp)
+                                .clip(if (recording) RoundedCornerShape(2.dp) else CircleShape)
+                                .background(Color.White)
+                        )
+                        Text(
+                            text = if (recording) stringResource(R.string.ui_action_stop).uppercase()
+                            else stringResource(R.string.ui_capture_rec_pill),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = EditorialMono,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = Color.White,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Full-Focus Editorial Capture Sheet modal overlay.
+ */
+@Composable
+internal fun FullFocusCaptureSheet(
+    armed: Boolean,
+    recording: Boolean,
+    notifAccess: Boolean,
+    modelsReady: Boolean,
+    spaceName: String?,
+    appendNoteTitle: String?,
+    savingQuickNote: Boolean,
+    onPickSpace: () -> Unit,
+    onToggleRecord: () -> Unit,
     onCancelRecording: () -> Unit,
     onArm: () -> Unit,
     onDisarm: () -> Unit,
     onOpenNotifAccess: () -> Unit,
     onOpenNote: (Long?) -> Unit,
-    spaceName: String?,
-    onPickSpace: () -> Unit
+    onQuickJotSave: (text: String, format: NoteFormat) -> Unit,
+    onOpenFullEditor: () -> Unit,
+    onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     var elapsed by remember { mutableIntStateOf(0) }
+    var jotText by rememberSaveable { mutableStateOf("") }
+    var jotExpanded by rememberSaveable { mutableStateOf(false) }
+
+    BackHandler { onDismiss() }
+
     LaunchedEffect(recording) {
         if (!recording) {
             elapsed = 0
@@ -228,43 +424,119 @@ internal fun RecordScreen(
     }
 
     Box(
-        Modifier
+        modifier = Modifier
             .fillMaxSize()
-            .background(Canvas)
+            .background(Color.Black.copy(alpha = 0.56f))
+            .clickable { onDismiss() },
+        contentAlignment = Alignment.BottomCenter
     ) {
-        if (modelsReady) {
-            // Subtle nocturnal cobalt atmospheric wash near the top edge.
-            Canvas(
-                Modifier
+        Surface(
+            color = Canvas,
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            border = BorderStroke(1.dp, Line),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = false) {}
+        ) {
+            Column(
+                modifier = Modifier
                     .fillMaxWidth()
-                    .height(220.dp)
+                    .navigationBarsPadding()
+                    .imePadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = 20.dp)
             ) {
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colorStops = arrayOf(
-                            0.0f to Blue.copy(alpha = 0.09f),
-                            0.65f to Blue.copy(alpha = 0.02f),
-                            1.0f to Color.Transparent
-                        ),
-                        center = Offset(size.width * 0.5f, -size.height * 0.15f),
-                        radius = size.width * 0.85f
-                    )
-                )
-            }
-        }
-
-        Column(Modifier.fillMaxSize()) {
-            if (!modelsReady) {
-                ScreenHeader(
-                    stringResource(R.string.ui_tab_record),
-                    stringResource(R.string.ui_record_subtitle_setup)
-                )
-                Column(
-                    Modifier
+                // Sheet handle + top editorial header
+                Box(
+                    modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
+                        .padding(top = 10.dp),
+                    contentAlignment = Alignment.Center
                 ) {
+                    Box(
+                        Modifier
+                            .width(36.dp)
+                            .height(4.dp)
+                            .clip(CircleShape)
+                            .background(Line)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.ui_capture_sheet_kicker),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = EditorialMono,
+                                letterSpacing = 1.2.sp
+                            ),
+                            color = SignalText
+                        )
+                        Text(
+                            text = stringResource(R.string.ui_capture_sheet_title),
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = Ink
+                        )
+                    }
+                    // Podcast arm toggle pill
+                    Surface(
+                        onClick = { if (armed) onDisarm() else onArm() },
+                        color = if (armed) BlueSoft else Surface1,
+                        shape = RoundedCornerShape(999.dp),
+                        border = BorderStroke(1.dp, if (armed) Blue.copy(alpha = 0.44f) else Line),
+                        modifier = Modifier.heightIn(min = 40.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            PodcastSignalGlyph(
+                                active = armed,
+                                color = if (armed) BlueText else Ink2,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = if (armed) {
+                                    stringResource(R.string.ui_record_podcast_armed_short)
+                                } else {
+                                    stringResource(R.string.ui_record_podcast_short)
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (armed) BlueText else Ink2
+                            )
+                        }
+                    }
+                    CloseIconButton(onClick = onDismiss)
+                }
+                HorizontalDivider(thickness = 1.dp, color = Line)
+
+                if (armed && !notifAccess) {
+                    Surface(
+                        onClick = onOpenNotifAccess,
+                        color = Amber.copy(alpha = 0.10f),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, Amber.copy(alpha = 0.35f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 10.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.ui_record_notif_short),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Amber,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                        )
+                    }
+                }
+
+                if (!modelsReady) {
+                    Spacer(Modifier.height(14.dp))
                     if (!ModelInstaller.installed) ModelSetupCard()
                     if (!TransformModel.installed) {
                         if (!ModelInstaller.installed) Spacer(Modifier.height(12.dp))
@@ -277,336 +549,457 @@ internal fun RecordScreen(
                                 label = stringResource(R.string.ui_record_use_plain),
                                 background = Surface2,
                                 foreground = Ink,
+                                border = BorderStroke(1.dp, Line),
                                 onClick = { Formats.select(context, NoteFormat.PLAIN) }
                             )
                         }
                     }
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(12.dp))
                     Text(
                         stringResource(R.string.ui_record_setup_body),
                         style = MaterialTheme.typography.bodySmall,
                         color = Ink2,
                         modifier = Modifier.padding(horizontal = 20.dp)
                     )
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(14.dp))
                     FormatPicker()
-                    Spacer(Modifier.height(24.dp))
+                    Spacer(Modifier.height(16.dp))
+                    // Still allow quick text margin note even before speech model download
+                    QuickJotComposer(
+                        jotText = jotText,
+                        onJotChange = { jotText = it },
+                        expanded = true,
+                        onExpandToggle = {},
+                        saving = savingQuickNote,
+                        onSave = {
+                            val clean = jotText.trim()
+                            if (clean.isNotEmpty()) {
+                                onQuickJotSave(clean, Formats.next)
+                                jotText = ""
+                            }
+                        },
+                        onOpenFullEditor = {
+                            onDismiss()
+                            onOpenFullEditor()
+                        }
+                    )
+                    return@Column
                 }
-                return@Column
-            }
 
-            EditorialRecordHeader(
-                spaceName = spaceName,
-                armed = armed,
-                notifAccess = notifAccess,
-                onPickSpace = onPickSpace,
-                onToggleArm = { if (armed) onDisarm() else onArm() },
-                onOpenNotifAccess = onOpenNotifAccess
-            )
+                // Append Follow-up banner when recording a follow-up to an existing note
+                if (recording && appendNoteTitle != null) {
+                    Surface(
+                        color = SignalSoft,
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, Signal.copy(alpha = 0.45f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 10.dp)
+                    ) {
+                        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            Text(
+                                text = stringResource(R.string.ui_followup_recording).uppercase(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = SignalText
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = appendNoteTitle,
+                                style = MaterialTheme.typography.titleMedium.copy(fontFamily = EditorialSerif),
+                                color = Ink,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
 
-            BoxWithConstraints(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            ) {
-                Column(
+                // Space selector row
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .heightIn(min = maxHeight)
-                        .padding(vertical = 12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    AmbientHaloRecordOrb(
-                        recording = recording,
-                        stage = Pipeline.stage,
-                        onToggle = onToggle
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.ui_record_filing_into),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Ink2
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = spaceName ?: stringResource(R.string.ui_record_space_inbox),
+                            style = MaterialTheme.typography.titleMedium.copy(fontFamily = EditorialSerif),
+                            color = if (spaceName != null) BlueText else Ink,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    PillButton(
+                        label = stringResource(R.string.ui_action_change),
+                        background = Surface1,
+                        foreground = Ink,
+                        border = BorderStroke(1.dp, Line),
+                        onClick = onPickSpace
                     )
+                }
 
-                    Spacer(Modifier.height(28.dp))
+                // Hero plate: editorial artwork (when idle) + waveform + timer + record control
+                Surface(
+                    color = Surface1,
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, if (recording) Signal.copy(alpha = 0.55f) else Line),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(18.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        if (!recording && Pipeline.stage == PipelineStage.IDLE) {
+                            Image(
+                                painter = painterResource(id = R.drawable.art_onboard_1),
+                                contentDescription = stringResource(R.string.ui_capture_sheet_title),
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .size(96.dp)
+                                    .padding(bottom = 8.dp)
+                            )
+                        }
 
-                    when (Pipeline.stage) {
-                        PipelineStage.TRANSCRIBING -> StatusCard(
+                        if (recording) {
+                            Text(
+                                text = formatDuration(elapsed),
+                                style = MaterialTheme.typography.displaySmall.copy(
+                                    fontFamily = EditorialMono,
+                                    fontFeatureSettings = "tnum"
+                                ),
+                                color = SignalText
+                            )
+                            Spacer(Modifier.height(10.dp))
+                        }
+
+                        EditorialInkWaveform(
+                            recording = recording,
+                            stage = Pipeline.stage,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                        )
+
+                        Spacer(Modifier.height(14.dp))
+
+                        val processing = Pipeline.stage == PipelineStage.TRANSCRIBING ||
+                            Pipeline.stage == PipelineStage.TRANSFORMING
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (recording) {
+                                PillButton(
+                                    label = stringResource(R.string.ui_record_cancel),
+                                    background = Surface2,
+                                    foreground = Red,
+                                    border = BorderStroke(1.dp, Line),
+                                    onClick = onCancelRecording
+                                )
+                            }
+                            Surface(
+                                onClick = onToggleRecord,
+                                enabled = !processing,
+                                color = if (recording) RedFill else SignalFill,
+                                shape = RoundedCornerShape(999.dp),
+                                modifier = Modifier
+                                    .heightIn(min = 50.dp)
+                                    .alpha(if (processing) 0.55f else 1f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        Modifier
+                                            .size(12.dp)
+                                            .clip(if (recording) RoundedCornerShape(3.dp) else CircleShape)
+                                            .background(Color.White)
+                                    )
+                                    Text(
+                                        text = when {
+                                            processing -> stringResource(R.string.ui_record_processing)
+                                            recording -> stringResource(R.string.ui_action_stop)
+                                            else -> stringResource(R.string.ui_record_tap_to_record)
+                                        },
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Pipeline feedback inside sheet
+                when (Pipeline.stage) {
+                    PipelineStage.TRANSCRIBING -> {
+                        Spacer(Modifier.height(12.dp))
+                        StatusCard(
                             title = stringResource(R.string.ui_record_stage_transcribing),
                             body = "",
                             accent = Blue
                         )
-                        PipelineStage.TRANSFORMING -> StatusCard(
+                    }
+                    PipelineStage.TRANSFORMING -> {
+                        Spacer(Modifier.height(12.dp))
+                        StatusCard(
                             title = pipelineStepLabel(Pipeline.step).uppercase(Locale.getDefault()),
                             body = "",
                             accent = Mint
                         )
-                        PipelineStage.DONE -> DoneCard(
+                    }
+                    PipelineStage.DONE -> {
+                        Spacer(Modifier.height(12.dp))
+                        DoneCard(
                             title = Pipeline.lastTitle,
                             noteId = Pipeline.lastNoteId,
-                            onOpenNote = onOpenNote,
+                            onOpenNote = { id ->
+                                onDismiss()
+                                onOpenNote(id)
+                            },
                             onDismiss = { Pipeline.reset() }
                         )
-                        PipelineStage.FAILED -> StatusCard(
+                    }
+                    PipelineStage.FAILED -> {
+                        Spacer(Modifier.height(12.dp))
+                        StatusCard(
                             title = stringResource(R.string.ui_record_stage_failed),
                             body = Pipeline.detail,
                             accent = Red,
                             showProgress = false,
                             onDismiss = { Pipeline.reset() }
                         )
-                        PipelineStage.IDLE -> {
-                            if (recording) {
+                    }
+                    PipelineStage.IDLE -> Unit
+                }
+
+                // Inline serif Format chips
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = stringResource(R.string.ui_section_format),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Ink2,
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    NoteFormat.entries.forEach { format ->
+                        val selected = format == Formats.next
+                        Surface(
+                            onClick = { Formats.select(context, format) },
+                            color = if (selected) SignalSoft else Surface1,
+                            shape = RoundedCornerShape(999.dp),
+                            border = BorderStroke(1.dp, if (selected) Signal.copy(alpha = 0.5f) else Line),
+                            modifier = Modifier.heightIn(min = 42.dp)
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            ) {
                                 Text(
-                                    text = formatDuration(elapsed),
-                                    style = MaterialTheme.typography.displaySmall.copy(
-                                        fontFeatureSettings = "tnum"
+                                    text = formatLabel(format),
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontFamily = EditorialSerif,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
                                     ),
-                                    color = SignalText
+                                    color = if (selected) SignalText else Ink2
                                 )
-                                Spacer(Modifier.height(14.dp))
-                                Surface(
-                                    onClick = onCancelRecording,
-                                    color = Color.Transparent,
-                                    shape = RoundedCornerShape(999.dp),
-                                    border = BorderStroke(1.dp, Line),
-                                    modifier = Modifier.heightIn(min = 48.dp)
-                                ) {
-                                    Box(
-                                        contentAlignment = Alignment.Center,
-                                        modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp)
-                                    ) {
-                                        Text(
-                                            text = stringResource(R.string.ui_record_cancel),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = Red
-                                        )
-                                    }
-                                }
-                            } else {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Box(
-                                        Modifier
-                                            .size(6.dp)
-                                            .background(Blue.copy(alpha = 0.82f), CircleShape)
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.ui_record_tap_to_speak),
-                                        style = MaterialTheme.typography.titleMedium.copy(
-                                            fontWeight = FontWeight.Medium,
-                                            letterSpacing = 0.1.sp
-                                        ),
-                                        color = Ink2
-                                    )
-                                }
                             }
                         }
                     }
                 }
-            }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = formatBlurb(Formats.next),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Ink2,
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
 
-            FloatingFormatRail(
-                selected = Formats.next,
-                onSelect = { format -> Formats.select(context, format) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 24.dp, end = 24.dp, bottom = 20.dp)
-            )
+                // Instant "Jot a margin note" quick composer
+                Spacer(Modifier.height(16.dp))
+                QuickJotComposer(
+                    jotText = jotText,
+                    onJotChange = { jotText = it },
+                    expanded = jotExpanded,
+                    onExpandToggle = { jotExpanded = !jotExpanded },
+                    saving = savingQuickNote,
+                    onSave = {
+                        val clean = jotText.trim()
+                        if (clean.isNotEmpty()) {
+                            onQuickJotSave(clean, Formats.next)
+                            jotText = ""
+                            jotExpanded = false
+                        }
+                    },
+                    onOpenFullEditor = {
+                        onDismiss()
+                        onOpenFullEditor()
+                    }
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun EditorialRecordHeader(
-    spaceName: String?,
-    armed: Boolean,
-    notifAccess: Boolean,
-    onPickSpace: () -> Unit,
-    onToggleArm: () -> Unit,
-    onOpenNotifAccess: () -> Unit
+private fun QuickJotComposer(
+    jotText: String,
+    onJotChange: (String) -> Unit,
+    expanded: Boolean,
+    onExpandToggle: () -> Unit,
+    saving: Boolean,
+    onSave: () -> Unit,
+    onOpenFullEditor: () -> Unit
 ) {
-    val hasSpace = spaceName != null
-    val resolvedSpace = spaceName ?: stringResource(R.string.ui_record_space_inbox)
-    val spaceSelectorDesc = stringResource(R.string.ui_record_space_selector_desc, resolvedSpace)
-    val triggerDesc = if (armed) {
-        stringResource(R.string.ui_record_podcast_trigger_on)
-    } else {
-        stringResource(R.string.ui_record_podcast_trigger_off)
-    }
-    val notifHintFull = stringResource(R.string.ui_record_notif_hint)
-
-    val badgeBg by animateColorAsState(
-        targetValue = if (armed) BlueSoft else Surface1,
-        animationSpec = tween(220),
-        label = "podcastBadgeBg"
-    )
-    val badgeBorder by animateColorAsState(
-        targetValue = if (armed) Blue.copy(alpha = 0.44f) else Line,
-        animationSpec = tween(220),
-        label = "podcastBadgeBorder"
-    )
-    val badgeInk by animateColorAsState(
-        targetValue = if (armed) BlueText else Ink2,
-        animationSpec = tween(220),
-        label = "podcastBadgeInk"
-    )
-
     Column(
-        Modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 8.dp)
+            .padding(horizontal = 20.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        Surface(
+            onClick = onExpandToggle,
+            color = Surface1,
+            shape = RoundedCornerShape(10.dp),
+            border = BorderStroke(1.dp, Line),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Surface(
-                onClick = onPickSpace,
-                color = Color.Transparent,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .weight(1f, fill = false)
-                    .heightIn(min = 48.dp)
-                    .semantics { contentDescription = spaceSelectorDesc }
-            ) {
-                Column(
-                    modifier = Modifier.padding(end = 12.dp, top = 2.dp, bottom = 2.dp),
-                    verticalArrangement = Arrangement.Center
+            Column(Modifier.padding(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Box(
-                            Modifier
-                                .size(6.dp)
-                                .background(if (hasSpace) Blue else PlaceholderInk, CircleShape)
+                    Text(
+                        text = stringResource(R.string.ui_capture_jot_title),
+                        style = MaterialTheme.typography.labelMedium.copy(fontFamily = EditorialSerif),
+                        color = Ink,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = stringResource(R.string.ui_capture_full_editor),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = BlueText,
+                        modifier = Modifier
+                            .clickable(enabled = !saving) { onOpenFullEditor() }
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+                }
+                AnimatedVisibility(visible = expanded || jotText.isNotBlank()) {
+                    Column {
+                        Spacer(Modifier.height(10.dp))
+                        EditorField(
+                            label = "",
+                            value = jotText,
+                            placeholder = stringResource(R.string.ui_capture_jot_hint),
+                            onChange = onJotChange,
+                            minHeight = 76.dp,
+                            enabled = !saving
                         )
-                        Text(
-                            text = stringResource(R.string.ui_record_filing_into),
-                            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.1.sp),
-                            color = if (hasSpace) Blue else Ink2,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    Spacer(Modifier.height(2.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = resolvedSpace,
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = Ink,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
-                        Spacer(Modifier.width(7.dp))
-                        Canvas(Modifier.size(width = 11.dp, height = 7.dp)) {
-                            val strokePx = 1.6.dp.toPx()
-                            val inset = strokePx / 2f
-                            val path = Path().apply {
-                                moveTo(inset, inset)
-                                lineTo(size.width / 2f, size.height - inset)
-                                lineTo(size.width - inset, inset)
-                            }
-                            drawPath(
-                                path = path,
-                                color = if (hasSpace) Blue else Ink2,
-                                style = Stroke(
-                                    width = strokePx,
-                                    cap = StrokeCap.Round,
-                                    join = StrokeJoin.Round
-                                )
+                        Spacer(Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            val canSave = jotText.isNotBlank() && !saving
+                            PillButton(
+                                label = if (saving) stringResource(R.string.ui_new_note_saving)
+                                else stringResource(R.string.ui_action_save),
+                                background = if (canSave) SignalFill else Surface2,
+                                foreground = if (canSave) Color.White else Ink2,
+                                enabled = canSave,
+                                onClick = onSave
                             )
                         }
                     }
-                }
-            }
-
-            Spacer(Modifier.width(12.dp))
-
-            Surface(
-                onClick = onToggleArm,
-                color = badgeBg,
-                shape = RoundedCornerShape(999.dp),
-                border = BorderStroke(1.dp, badgeBorder),
-                modifier = Modifier
-                    .heightIn(min = 48.dp)
-                    .semantics { contentDescription = triggerDesc }
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    PodcastSignalGlyph(
-                        active = armed,
-                        color = badgeInk,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = if (armed) {
-                            stringResource(R.string.ui_record_podcast_armed_short)
-                        } else {
-                            stringResource(R.string.ui_record_podcast_short)
-                        },
-                        style = MaterialTheme.typography.labelMedium,
-                        color = badgeInk,
-                        maxLines = 1
-                    )
                 }
             }
         }
+    }
+}
 
-        if (armed && !notifAccess) {
-            Spacer(Modifier.height(10.dp))
-            Surface(
-                onClick = onOpenNotifAccess,
-                color = Amber.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, Amber.copy(alpha = 0.35f)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .semantics { contentDescription = notifHintFull }
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Box(
-                        Modifier
-                            .size(6.dp)
-                            .background(Amber, CircleShape)
-                    )
-                    Text(
-                        text = stringResource(R.string.ui_record_notif_short),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Amber,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Canvas(Modifier.size(width = 6.dp, height = 10.dp)) {
-                        val strokePx = 1.5.dp.toPx()
-                        val inset = strokePx / 2f
-                        val path = Path().apply {
-                            moveTo(inset, inset)
-                            lineTo(size.width - inset, size.height / 2f)
-                            lineTo(inset, size.height - inset)
-                        }
-                        drawPath(
-                            path = path,
-                            color = Amber,
-                            style = Stroke(
-                                width = strokePx,
-                                cap = StrokeCap.Round,
-                                join = StrokeJoin.Round
-                            )
-                        )
-                    }
-                }
+/**
+ * Animated editorial ink waveform drawn with Compose Canvas (no @Composable palette reads inside DrawScope).
+ */
+@Composable
+private fun EditorialInkWaveform(
+    recording: Boolean,
+    stage: PipelineStage,
+    modifier: Modifier = Modifier
+) {
+    val active = recording || stage == PipelineStage.TRANSCRIBING || stage == PipelineStage.TRANSFORMING
+    val phase = if (active) {
+        val transition = rememberInfiniteTransition(label = "inkWaveform")
+        val p by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = (2f * PI).toFloat(),
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = if (recording) 1400 else 2200, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "wavePhase"
+        )
+        p
+    } else {
+        0f
+    }
+
+    val barColor = when {
+        recording -> Signal
+        stage == PipelineStage.TRANSCRIBING -> Blue
+        stage == PipelineStage.TRANSFORMING -> Mint
+        else -> Ink2.copy(alpha = 0.45f)
+    }
+    val ruleColor = Line
+
+    Canvas(modifier) {
+        val midY = size.height / 2f
+        drawLine(
+            color = ruleColor,
+            start = Offset(0f, midY),
+            end = Offset(size.width, midY),
+            strokeWidth = 1.dp.toPx()
+        )
+        val count = 34
+        val step = size.width / count
+        val barWidth = (step * 0.46f).coerceAtLeast(2.dp.toPx())
+        for (i in 0 until count) {
+            val norm = i.toFloat() / count.toFloat()
+            val envelope = sin(norm * PI).toFloat().coerceAtLeast(0.15f)
+            val amp = if (active) {
+                val wave = 0.5f + 0.5f * sin(phase + i * 0.55f)
+                (0.18f + 0.78f * wave) * envelope
+            } else {
+                0.14f + 0.16f * envelope
             }
+            val barH = (size.height * amp).coerceAtLeast(3.dp.toPx())
+            val x = i * step + (step - barWidth) / 2f
+            drawRoundRect(
+                color = barColor,
+                topLeft = Offset(x, midY - barH / 2f),
+                size = Size(barWidth, barH),
+                cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
+            )
         }
     }
 }
@@ -633,19 +1026,20 @@ private fun PodcastSignalGlyph(
         0.55f
     }
 
+    val dotColor = if (active) Blue else color
     Canvas(modifier) {
         val cx = size.width / 2f
         val cy = size.height / 2f
         val stroke = Stroke(width = 1.4.dp.toPx(), cap = StrokeCap.Round)
 
         drawCircle(
-            color = if (active) Blue else color,
-            radius = 2.1.dp.toPx(),
+            color = dotColor,
+            radius = 2.dp.toPx(),
             center = Offset(cx, cy)
         )
 
-        val innerR = 4.6.dp.toPx()
-        val outerR = 7.2.dp.toPx()
+        val innerR = 4.2.dp.toPx()
+        val outerR = 6.6.dp.toPx()
 
         for (startAngle in floatArrayOf(-42f, 138f)) {
             drawArc(
@@ -666,297 +1060,6 @@ private fun PodcastSignalGlyph(
                 size = Size(outerR * 2f, outerR * 2f),
                 style = stroke
             )
-        }
-    }
-}
-
-@Composable
-private fun AmbientHaloRecordOrb(
-    recording: Boolean,
-    stage: PipelineStage,
-    onToggle: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val processing = stage == PipelineStage.TRANSCRIBING || stage == PipelineStage.TRANSFORMING
-    val label = when {
-        processing -> stringResource(R.string.ui_record_processing)
-        recording -> stringResource(R.string.ui_action_stop)
-        else -> stringResource(R.string.ui_record_tap_to_record)
-    }
-
-    val orbDiameter = 148.dp
-    val haloSize = 276.dp
-
-    val targetAuraColor = when {
-        recording -> Signal
-        stage == PipelineStage.TRANSCRIBING -> Blue
-        stage == PipelineStage.TRANSFORMING -> Mint
-        stage == PipelineStage.FAILED -> Red
-        else -> Signal
-    }
-    val auraColor by animateColorAsState(
-        targetValue = targetAuraColor,
-        animationSpec = tween(420),
-        label = "auraColor"
-    )
-    val baseGlowAlpha by animateFloatAsState(
-        targetValue = when {
-            recording -> 0.30f
-            processing -> 0.24f
-            stage == PipelineStage.FAILED -> 0.16f
-            else -> 0.14f
-        },
-        animationSpec = tween(420),
-        label = "baseGlowAlpha"
-    )
-
-    val breathTransition = rememberInfiniteTransition(label = "ambientBreath")
-    val breath by breathTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "breath"
-    )
-
-    val ripplePhase = if (recording || processing) {
-        val rippleTransition = rememberInfiniteTransition(label = "orbRipples")
-        val phase by rippleTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(
-                    durationMillis = if (recording) 2100 else 2800,
-                    easing = LinearEasing
-                ),
-                repeatMode = RepeatMode.Restart
-            ),
-            label = "ripplePhase"
-        )
-        phase
-    } else {
-        0f
-    }
-
-    val orbFill by animateColorAsState(
-        targetValue = if (recording) Signal else Surface1,
-        animationSpec = tween(260),
-        label = "orbFill"
-    )
-    val orbBorder by animateColorAsState(
-        targetValue = when {
-            recording -> Signal.copy(alpha = 0.85f)
-            stage == PipelineStage.TRANSCRIBING -> Blue.copy(alpha = 0.55f)
-            stage == PipelineStage.TRANSFORMING -> Mint.copy(alpha = 0.55f)
-            else -> Blue.copy(alpha = 0.38f)
-        },
-        animationSpec = tween(260),
-        label = "orbBorder"
-    )
-    val orbAlpha by animateFloatAsState(
-        targetValue = if (processing) 0.54f else 1f,
-        animationSpec = tween(260),
-        label = "orbAlpha"
-    )
-    val glyphSize by animateDpAsState(
-        targetValue = if (recording) 40.dp else 44.dp,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "glyphSize"
-    )
-    val glyphCorner by animateDpAsState(
-        targetValue = if (recording) 10.dp else 22.dp,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "glyphCorner"
-    )
-    val glyphColor by animateColorAsState(
-        targetValue = when {
-            recording -> Color.White
-            stage == PipelineStage.TRANSCRIBING -> Blue.copy(alpha = 0.72f)
-            stage == PipelineStage.TRANSFORMING -> Mint.copy(alpha = 0.72f)
-            else -> Signal
-        },
-        animationSpec = tween(240),
-        label = "glyphColor"
-    )
-
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier.size(haloSize)
-    ) {
-        Canvas(Modifier.fillMaxSize()) {
-            val orbRadius = (orbDiameter / 2f).toPx()
-            val glowAlpha = (baseGlowAlpha + (breath - 0.5f) * 0.05f).coerceIn(0f, 0.36f)
-            val glowRadius = (size.minDimension * (0.45f + 0.045f * breath)).coerceAtLeast(orbRadius)
-
-            val isIdleReady = !recording && !processing && stage != PipelineStage.FAILED
-            val haloStops = if (isIdleReady) {
-                arrayOf(
-                    0.0f to Signal.copy(alpha = glowAlpha * 1.15f),
-                    0.44f to Blue.copy(alpha = glowAlpha * 1.05f),
-                    0.74f to Blue.copy(alpha = glowAlpha * 0.28f),
-                    1.0f to Color.Transparent
-                )
-            } else {
-                arrayOf(
-                    0.0f to auraColor.copy(alpha = glowAlpha),
-                    0.44f to auraColor.copy(alpha = glowAlpha * 0.50f),
-                    0.74f to auraColor.copy(alpha = glowAlpha * 0.14f),
-                    1.0f to Color.Transparent
-                )
-            }
-
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colorStops = haloStops,
-                    center = center,
-                    radius = glowRadius
-                ),
-                radius = glowRadius,
-                center = center
-            )
-
-            if (!recording && !processing) {
-                drawCircle(
-                    color = Blue.copy(alpha = 0.20f + 0.10f * breath),
-                    radius = orbRadius + 16.dp.toPx() + 3.dp.toPx() * breath,
-                    style = Stroke(width = 1.dp.toPx())
-                )
-            }
-
-            if (recording) {
-                val spread = (size.minDimension / 2f - orbRadius).coerceAtLeast(24.dp.toPx())
-                for (i in 0 until 3) {
-                    val p = (ripplePhase + i / 3f) % 1f
-                    val eased = 1f - (1f - p) * (1f - p)
-                    val ringAlpha = (1f - p) * (1f - p) * 0.34f
-                    drawCircle(
-                        color = Signal.copy(alpha = ringAlpha),
-                        radius = orbRadius + eased * spread,
-                        style = Stroke(width = (1.8.dp - 0.8.dp * p).toPx())
-                    )
-                }
-            } else if (processing) {
-                val spread = (size.minDimension / 2f - orbRadius).coerceAtLeast(20.dp.toPx()) * 0.82f
-                for (i in 0 until 2) {
-                    val p = (ripplePhase + i / 2f) % 1f
-                    val eased = 1f - (1f - p) * (1f - p)
-                    val ringAlpha = (1f - p) * 0.24f
-                    drawCircle(
-                        color = auraColor.copy(alpha = ringAlpha),
-                        radius = orbRadius + eased * spread,
-                        style = Stroke(width = 1.2.dp.toPx())
-                    )
-                }
-            }
-        }
-
-        Surface(
-            onClick = onToggle,
-            enabled = !processing,
-            color = orbFill,
-            shape = CircleShape,
-            border = BorderStroke(1.dp, orbBorder),
-            modifier = Modifier
-                .size(orbDiameter)
-                .alpha(orbAlpha)
-                .semantics {
-                    contentDescription = label
-                    onClick(label = label, action = null)
-                }
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Box(
-                    Modifier
-                        .size(glyphSize)
-                        .clip(RoundedCornerShape(glyphCorner))
-                        .background(glyphColor)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun FloatingFormatRail(
-    selected: NoteFormat,
-    onSelect: (NoteFormat) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val formats = NoteFormat.entries
-    val selectedIndex = formats.indexOf(selected).coerceAtLeast(0)
-
-    Surface(
-        color = Surface1,
-        shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(1.dp, Line),
-        modifier = modifier
-    ) {
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(4.dp)
-        ) {
-            val segmentWidth = maxWidth / formats.size
-            val indicatorOffset by animateDpAsState(
-                targetValue = segmentWidth * selectedIndex,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioNoBouncy,
-                    stiffness = Spring.StiffnessMediumLow
-                ),
-                label = "formatRailIndicator"
-            )
-
-            Box(
-                Modifier
-                    .offset(x = indicatorOffset)
-                    .width(segmentWidth)
-                    .height(48.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(BlueSoft)
-                    .border(1.dp, Blue.copy(alpha = 0.44f), RoundedCornerShape(999.dp))
-            )
-
-            Row(Modifier.fillMaxWidth()) {
-                formats.forEach { format ->
-                    val isSelected = format == selected
-                    val textColor by animateColorAsState(
-                        targetValue = if (isSelected) BlueText else Ink2,
-                        animationSpec = tween(180),
-                        label = "formatRailText"
-                    )
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .clickable(
-                                role = Role.Tab,
-                                onClick = { onSelect(format) }
-                            )
-                            .semantics { this.selected = isSelected }
-                            .padding(horizontal = 4.dp)
-                    ) {
-                        Text(
-                            text = formatLabel(format),
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
-                            ),
-                            color = textColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
         }
     }
 }
@@ -984,13 +1087,13 @@ private fun StatusCard(
 ) {
     Surface(
         color = Surface1,
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.5f)),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp)
-            .border(1.dp, accent.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+            .padding(horizontal = 20.dp)
     ) {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier
@@ -1010,7 +1113,7 @@ private fun StatusCard(
                 Text(body, style = MaterialTheme.typography.bodySmall, color = Ink2)
             }
             if (showProgress) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth(),
                     color = accent,
@@ -1018,7 +1121,7 @@ private fun StatusCard(
                 )
             }
             if (onDismiss != null) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     PillButton(
                         label = stringResource(R.string.ui_action_dismiss),
@@ -1041,23 +1144,23 @@ private fun DoneCard(
 ) {
     Surface(
         color = SignalSoft,
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, Signal.copy(alpha = 0.5f)),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp)
-            .border(1.dp, Signal, RoundedCornerShape(20.dp))
+            .padding(horizontal = 20.dp)
     ) {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(14.dp)) {
             Text(stringResource(R.string.ui_record_note_ready), style = MaterialTheme.typography.labelSmall, color = SignalText)
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Text(
                 title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleMedium.copy(fontFamily = EditorialSerif),
                 color = Ink,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 PillButton(
                     label = stringResource(R.string.ui_record_view_in_notes),
@@ -1080,36 +1183,6 @@ internal fun formatDuration(seconds: Int): String {
     val minutes = seconds / 60
     val secs = seconds % 60
     return "%d:%02d".format(minutes, secs)
-}
-
-@Composable
-internal fun SpaceChip(spaceName: String?, onClick: () -> Unit) {
-    val active = spaceName != null
-    Surface(
-        onClick = onClick,
-        color = if (active) SignalSoft else Surface2,
-        shape = RoundedCornerShape(999.dp),
-        modifier = Modifier.heightIn(min = 48.dp)
-    ) {
-        Row(
-            Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                Modifier
-                    .size(6.dp)
-                    .background(if (active) Signal else Ink2, CircleShape)
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                if (active) stringResource(R.string.ui_space_chip_active, spaceName.orEmpty()) else stringResource(R.string.ui_space_chip_none),
-                style = MaterialTheme.typography.labelMedium,
-                color = if (active) SignalText else Ink2,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
 }
 
 @Composable

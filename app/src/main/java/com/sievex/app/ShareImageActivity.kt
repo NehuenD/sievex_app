@@ -116,7 +116,7 @@ class ShareImageActivity : ComponentActivity() {
         }
 
         setContent {
-            SievexTheme {
+            SievexTheme(updateSystemBars = false) {
                 if (uris.isNotEmpty()) {
                     ShareSheet(
                         uris = uris,

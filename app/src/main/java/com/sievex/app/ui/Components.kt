@@ -104,13 +104,14 @@ internal fun SubTab(
         enabled = enabled,
         color = if (selected) SignalSoft else Surface2,
         shape = RoundedCornerShape(999.dp),
+        border = if (selected) BorderStroke(1.dp, Signal.copy(alpha = 0.4f)) else BorderStroke(1.dp, Line),
         modifier = Modifier
             .heightIn(min = 48.dp)
             .alpha(if (enabled) 1f else 0.42f)
     ) {
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
         ) {
             Text(
                 label,
@@ -176,7 +177,7 @@ internal fun CloseIconButton(
 }
 
 /**
- * Labelled dark-well text field shared across editors, space/lens dialogs, and Share sheet.
+ * Labelled folio-well text field shared across editors, space/lens dialogs, and Share sheet.
  */
 @Composable
 internal fun EditorField(
@@ -210,9 +211,9 @@ internal fun EditorField(
         Box(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(10.dp))
                 .background(Surface2)
-                .border(1.dp, Line, RoundedCornerShape(16.dp))
+                .border(1.dp, Line, RoundedCornerShape(10.dp))
                 .alpha(if (enabled) 1f else 0.6f)
                 .padding(horizontal = 14.dp, vertical = 13.dp)
         ) {
@@ -238,7 +239,7 @@ internal fun EditorField(
     }
 }
 
-/** Shared modal card container so all dialogs in AppUi, MediaUi, and ShareImageActivity match. */
+/** Shared modal folio container so all dialogs in AppUi, MediaUi, and ShareImageActivity match. */
 @Composable
 internal fun AppDialogSurface(
     onDismissRequest: () -> Unit,
@@ -248,7 +249,7 @@ internal fun AppDialogSurface(
     Dialog(onDismissRequest = onDismissRequest) {
         Surface(
             color = Surface1,
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(12.dp),
             border = BorderStroke(1.dp, Line),
             modifier = modifier.fillMaxWidth()
         ) {
@@ -268,12 +269,12 @@ internal fun ConfirmDialog(
     destructive: Boolean = true
 ) {
     AppDialogSurface(onDismissRequest = onDismiss) {
-        Text(title, style = MaterialTheme.typography.titleMedium, color = Ink)
+        Text(title, style = MaterialTheme.typography.headlineSmall, color = Ink)
         Spacer(Modifier.height(10.dp))
         Text(body, style = MaterialTheme.typography.bodySmall, color = Ink2)
         Spacer(Modifier.height(18.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            PillButton(dismissLabel, Surface2, Ink, onDismiss)
+            PillButton(dismissLabel, Surface2, Ink, onDismiss, border = BorderStroke(1.dp, Line))
             Spacer(Modifier.width(10.dp))
             PillButton(
                 label = confirmLabel,
@@ -348,7 +349,7 @@ internal fun ReminderPickerDialog(
     )
 
     AppDialogSurface(onDismissRequest = onDismiss) {
-        Text(stringResource(R.string.ui_reminder_dialog_title), style = MaterialTheme.typography.titleMedium, color = Ink)
+        Text(stringResource(R.string.ui_reminder_dialog_title), style = MaterialTheme.typography.headlineSmall, color = Ink)
         if (title.isNotBlank()) {
             Spacer(Modifier.height(4.dp))
             Text(
@@ -373,7 +374,7 @@ internal fun ReminderPickerDialog(
                 Surface(
                     onClick = { onSchedule(ms) },
                     color = Surface2,
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(10.dp),
                     border = BorderStroke(1.dp, Line),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -384,7 +385,11 @@ internal fun ReminderPickerDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(label, style = MaterialTheme.typography.bodyMedium, color = Ink, modifier = Modifier.weight(1f))
-                        Text(formatReminderWhen(ms), style = MaterialTheme.typography.labelSmall, color = BlueText)
+                        Text(
+                            formatReminderWhen(ms),
+                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = EditorialMono),
+                            color = BlueText
+                        )
                     }
                 }
             }

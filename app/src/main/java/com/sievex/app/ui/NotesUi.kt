@@ -4,6 +4,7 @@ import android.content.Intent
 import android.media.MediaPlayer
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -13,9 +14,11 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,7 +29,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,9 +45,11 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -67,10 +74,13 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.sievex.app.AppLocale
 import com.sievex.app.CaptureLog
 import com.sievex.app.CaptureService
@@ -96,145 +106,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Date
 import java.util.Locale
 
-@Composable
-internal fun NoteCard(
-    note: NoteItem,
-    spaceName: String? = null,
-    mediaCount: Int = 0,
-    onClick: () -> Unit,
-    onDelete: (() -> Unit)? = null
-) {
-    var menuOpen by remember(note.id) { mutableStateOf(false) }
-    val format = NoteFormat.from(note.format)
-    val snippet = remember(note.oneLine, note.items, note.verbatim) {
-        when {
-            note.oneLine.isNotBlank() -> note.oneLine
-            note.items.isNotEmpty() -> note.items.take(3).joinToString(" · ")
-            note.verbatim.isNotBlank() -> note.verbatim
-            else -> ""
-        }
-    }
+private val DESK_MEDIA_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM d · HH:mm")
 
-    Surface(
-        onClick = onClick,
-        color = Surface1,
-        shape = RoundedCornerShape(24.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(Modifier.padding(start = 18.dp, end = if (onDelete != null) 8.dp else 18.dp, top = 16.dp, bottom = 16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ModeChip(note.mode)
-                if (format != NoteFormat.NOTE) {
-                    Spacer(Modifier.width(6.dp))
-                    Box(
-                        Modifier
-                            .border(1.dp, Line, CircleShape)
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Text(formatLabel(format).uppercase(), style = MaterialTheme.typography.labelSmall, color = Ink2)
-                    }
-                }
-                Spacer(Modifier.weight(1f))
-                if (note.editedAt != null) {
-                    EditedBadge()
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text(whenLabel(note.whenText), style = MaterialTheme.typography.labelSmall, color = Ink2)
-                if (onDelete != null) {
-                    Box {
-                        Surface(
-                            onClick = { menuOpen = true },
-                            color = Color.Transparent,
-                            shape = CircleShape,
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Filled.MoreVert,
-                                    contentDescription = stringResource(R.string.ui_action_more),
-                                    tint = Ink2,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.ui_note_delete_confirm), color = Red) },
-                                onClick = {
-                                    menuOpen = false
-                                    onDelete()
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            Text(
-                note.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = Ink,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(end = if (onDelete != null) 10.dp else 0.dp)
-            )
-            if (snippet.isNotBlank()) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    snippet,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Ink2,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(end = if (onDelete != null) 10.dp else 0.dp)
-                )
-            }
-            if (spaceName != null || note.audioPath != null || mediaCount > 0 || note.followUps.isNotEmpty()) {
-                Spacer(Modifier.height(10.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (spaceName != null) {
-                        Text(
-                            spaceName,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = SignalText,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    if (note.audioPath != null) {
-                        Text(
-                            stringResource(R.string.ui_note_audio_label),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Blue
-                        )
-                    }
-                    if (note.followUps.isNotEmpty()) {
-                        Text(
-                            if (note.followUps.size == 1) stringResource(R.string.ui_followup_count_one)
-                            else stringResource(R.string.ui_followup_count_many, note.followUps.size),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = BlueText
-                        )
-                    }
-                    if (mediaCount > 0) {
-                        Text(
-                            if (mediaCount == 1) stringResource(R.string.ui_media_count_one) else stringResource(R.string.ui_media_count_many, mediaCount),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Ink2
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
+private enum class DeskFilter { ALL, AUDIO, IMAGES }
 private enum class SearchScope { ALL, NOTES, MEDIA, REPORTS }
 
 private fun extractMatchSnippet(text: String, query: String, maxChars: Int = 110): String {
@@ -249,36 +129,47 @@ private fun extractMatchSnippet(text: String, query: String, maxChars: Int = 110
     return prefix + clean.substring(start, end) + suffix
 }
 
+/**
+ * Editorial broadsheet Desk tab: Masthead + Search + Horizontal Spaces Shelf + Full-bleed Margin-Note Stream.
+ */
 @Composable
 internal fun NotesScreen(
     notes: List<NoteItem>,
     spaces: List<Space>,
+    currentSpaceId: String?,
+    noteCounts: Map<String, Int>,
+    mediaCounts: Map<String, Int>,
     allMedia: List<MediaItem> = emptyList(),
     allArtifacts: List<LensArtifact> = emptyList(),
     mediaNoteCounts: Map<Long, Int>,
     activeTagFilter: String?,
     onClearTagFilter: () -> Unit,
     onNewNote: () -> Unit,
+    onNewSpace: () -> Unit,
+    onOpenSpace: (Space) -> Unit,
+    onOpenSettings: () -> Unit,
     onOpen: (NoteItem) -> Unit,
     onOpenMedia: (MediaItem) -> Unit = {},
     onOpenSpaceLens: (String, String) -> Unit = { _, _ -> },
     onDeleteNote: (NoteItem) -> Unit
 ) {
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var searchScope by rememberSaveable { mutableStateOf(SearchScope.ALL) }
-    var selectedMode by rememberSaveable { mutableStateOf<String?>(null) }
+    var deskFilter by rememberSaveable { mutableStateOf(DeskFilter.ALL) }
     var noteToDelete by remember { mutableStateOf<NoteItem?>(null) }
 
     val spaceNames = remember(spaces) { spaces.associate { it.id to it.name } }
-    val availableModes = remember(notes) {
-        notes.map { it.mode }.distinct()
-    }
     val trimmedQuery = query.trim()
     val searching = trimmedQuery.isNotEmpty()
 
-    val filteredNotes = remember(notes, trimmedQuery, selectedMode, activeTagFilter, spaceNames) {
+    val filteredNotes = remember(notes, trimmedQuery, deskFilter, activeTagFilter, spaceNames) {
         notes.filter { n ->
-            val matchesMode = selectedMode == null || n.mode == selectedMode
+            val matchesStreamType = when (deskFilter) {
+                DeskFilter.ALL -> true
+                DeskFilter.AUDIO -> n.audioPath != null
+                DeskFilter.IMAGES -> false
+            }
             val matchesTag = activeTagFilter == null || n.tags.any { it.equals(activeTagFilter, ignoreCase = true) }
             val matchesQuery = trimmedQuery.isEmpty() ||
                 n.title.contains(trimmedQuery, ignoreCase = true) ||
@@ -292,7 +183,7 @@ internal fun NotesScreen(
                 n.items.any { it.contains(trimmedQuery, ignoreCase = true) } ||
                 n.followUps.any { it.text.contains(trimmedQuery, ignoreCase = true) } ||
                 (n.spaceId?.let { spaceNames[it] }?.contains(trimmedQuery, ignoreCase = true) == true)
-            matchesMode && matchesTag && matchesQuery
+            (if (trimmedQuery.isNotEmpty()) matchesTag && matchesQuery else matchesStreamType && matchesTag)
         }
     }
 
@@ -314,34 +205,137 @@ internal fun NotesScreen(
         }
     }
 
-    val isFiltered = searching || selectedMode != null || activeTagFilter != null
+    val streamEntries = remember(filteredNotes, allMedia, deskFilter, activeTagFilter) {
+        if (activeTagFilter != null) {
+            filteredNotes.map { FeedEntry.NoteEntry(it) }
+        } else {
+            when (deskFilter) {
+                DeskFilter.ALL -> (filteredNotes.map { FeedEntry.NoteEntry(it) } +
+                    allMedia.map { FeedEntry.MediaEntry(it) })
+                    .sortedByDescending { it.timestamp }
+                DeskFilter.AUDIO -> filteredNotes.map { FeedEntry.NoteEntry(it) }
+                DeskFilter.IMAGES -> allMedia.sortedByDescending { it.addedAt }
+                    .map { FeedEntry.MediaEntry(it) }
+            }
+        }
+    }
 
-    Box(
-        Modifier
+    val activeSpaceName = currentSpaceId?.let { spaceNames[it] }
+    val countLabel = if (notes.size == 1) {
+        stringResource(R.string.ui_notes_count_one)
+    } else {
+        stringResource(R.string.ui_notes_count_many, notes.size)
+    }
+    val colophon = "$countLabel · ${activeSpaceName ?: stringResource(R.string.ui_record_space_inbox)}"
+
+    LazyColumn(
+        modifier = Modifier
             .fillMaxSize()
-            .background(Canvas)
+            .background(Canvas),
+        contentPadding = PaddingValues(bottom = 24.dp)
     ) {
-        LazyColumn(
-            Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item(contentType = "header") {
-                Column {
-                    ScreenHeader(
-                        stringResource(R.string.ui_tab_notes),
-                        if (notes.size == 1) stringResource(R.string.ui_notes_count_one) else stringResource(R.string.ui_notes_count_many, notes.size)
-                    )
-                    // Unified Search bar (Notes + Verbatim + Screenshot OCR + Reports)
+        // Broadsheet Serif Masthead
+        item(contentType = "masthead") {
+            Column(Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 10.dp, top = 16.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.app_name),
+                            style = MaterialTheme.typography.displaySmall,
+                            color = Ink,
+                            maxLines = 1
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = colophon,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = EditorialMono,
+                                fontWeight = FontWeight.Medium
+                            ),
+                            color = Ink2,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Surface(
+                        onClick = {
+                            if (searchOpen && query.isNotEmpty()) {
+                                query = ""
+                                searchScope = SearchScope.ALL
+                            } else {
+                                searchOpen = !searchOpen
+                            }
+                        },
+                        color = if (searchOpen || searching) BlueSoft else Color.Transparent,
+                        shape = CircleShape,
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = if (searchOpen && query.isEmpty()) Icons.Filled.Close else Icons.Filled.Search,
+                                contentDescription = stringResource(R.string.ui_desk_search_action),
+                                tint = if (searchOpen || searching) BlueText else Ink,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    Surface(
+                        onClick = onNewNote,
+                        color = Color.Transparent,
+                        shape = CircleShape,
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Filled.Add,
+                                contentDescription = stringResource(R.string.ui_notes_new_note),
+                                tint = SignalText,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                    Surface(
+                        onClick = onOpenSettings,
+                        color = Color.Transparent,
+                        shape = CircleShape,
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Filled.Settings,
+                                contentDescription = stringResource(R.string.ui_tab_settings),
+                                tint = Ink,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+                HorizontalDivider(thickness = 1.dp, color = Line)
+            }
+        }
+
+        // Expandable unified search bar
+        item(contentType = "search_bar") {
+            AnimatedVisibility(visible = searchOpen || searching) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp, bottom = 4.dp)
+                ) {
                     Row(
                         Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 20.dp)
-                            .clip(RoundedCornerShape(16.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(Surface1)
-                            .border(1.dp, if (searching) Blue.copy(alpha = 0.55f) else Line, RoundedCornerShape(16.dp))
-                            .heightIn(min = 48.dp)
-                            .padding(start = 14.dp, end = 6.dp),
+                            .border(1.dp, if (searching) Blue.copy(alpha = 0.55f) else Line, RoundedCornerShape(8.dp))
+                            .heightIn(min = 46.dp)
+                            .padding(start = 14.dp, end = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -380,7 +374,6 @@ internal fun NotesScreen(
                             )
                         }
                     }
-
                     if (searching) {
                         Spacer(Modifier.height(10.dp))
                         Row(
@@ -407,84 +400,236 @@ internal fun NotesScreen(
                                 selected = searchScope == SearchScope.REPORTS
                             ) { searchScope = SearchScope.REPORTS }
                         }
-                    } else if (availableModes.size > 1 || activeTagFilter != null) {
-                        Spacer(Modifier.height(10.dp))
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState())
-                                .padding(horizontal = 20.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            SubTab(
-                                label = stringResource(R.string.ui_notes_filter_all),
-                                selected = selectedMode == null && activeTagFilter == null
+                    }
+                }
+            }
+        }
+
+        // Horizontal Spaces Shelf (hidden during active text search to focus results)
+        if (!searching) {
+            item(contentType = "spaces_shelf") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp, bottom = 14.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.ui_desk_shelf_title),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = EditorialMono,
+                            letterSpacing = 1.2.sp
+                        ),
+                        color = Ink2,
+                        modifier = Modifier.padding(horizontal = 20.dp)
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        itemsIndexed(spaces, key = { _, s -> s.id }) { idx, space ->
+                            val spineColor = when (idx % 3) {
+                                0 -> Signal
+                                1 -> Blue
+                                else -> Mint
+                            }
+                            DeskSpaceSpineCard(
+                                space = space,
+                                spineColor = spineColor,
+                                noteCount = noteCounts[space.id] ?: 0,
+                                mediaCount = mediaCounts[space.id] ?: 0,
+                                isFilingTarget = space.id == currentSpaceId,
+                                onClick = { onOpenSpace(space) }
+                            )
+                        }
+                        item(key = "new_space_shelf") {
+                            Surface(
+                                onClick = onNewSpace,
+                                color = Surface1,
+                                shape = RoundedCornerShape(4.dp),
+                                border = BorderStroke(1.dp, Line),
+                                modifier = Modifier
+                                    .width(120.dp)
+                                    .height(84.dp)
                             ) {
-                                selectedMode = null
-                                if (activeTagFilter != null) onClearTagFilter()
-                            }
-                            if (activeTagFilter != null) {
-                                Surface(
-                                    onClick = onClearTagFilter,
-                                    color = SignalSoft,
-                                    shape = RoundedCornerShape(999.dp),
-                                    modifier = Modifier.heightIn(min = 48.dp)
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(12.dp),
+                                    verticalArrangement = Arrangement.Center,
+                                    horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    Row(
-                                        Modifier.padding(start = 14.dp, top = 10.dp, end = 10.dp, bottom = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text("#$activeTagFilter", style = MaterialTheme.typography.labelMedium, color = SignalText)
-                                        Spacer(Modifier.width(6.dp))
-                                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.ui_action_clear), tint = SignalText, modifier = Modifier.size(16.dp))
-                                    }
-                                }
-                            }
-                            availableModes.forEach { mode ->
-                                SubTab(
-                                    label = modeLabel(mode),
-                                    selected = selectedMode == mode
-                                ) {
-                                    selectedMode = if (selectedMode == mode) null else mode
+                                    Icon(
+                                        Icons.Filled.Add,
+                                        contentDescription = stringResource(R.string.ui_space_new),
+                                        tint = SignalText,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = stringResource(R.string.ui_space_new),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = EditorialSerif),
+                                        color = SignalText,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
                             }
                         }
                     }
-                    Spacer(Modifier.height(4.dp))
                 }
+                HorizontalDivider(thickness = 1.dp, color = Line)
             }
 
-            val showNotes = !searching || searchScope == SearchScope.ALL || searchScope == SearchScope.NOTES
-            val showMedia = searching && (searchScope == SearchScope.ALL || searchScope == SearchScope.MEDIA)
-            val showReports = searching && (searchScope == SearchScope.ALL || searchScope == SearchScope.REPORTS)
+            // Stream header & inline filter tabs (All | Audio | Images)
+            item(contentType = "stream_filters") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    DeskInlineFilterTab(
+                        label = stringResource(R.string.ui_notes_filter_all),
+                        selected = deskFilter == DeskFilter.ALL && activeTagFilter == null,
+                        onClick = {
+                            deskFilter = DeskFilter.ALL
+                            if (activeTagFilter != null) onClearTagFilter()
+                        }
+                    )
+                    DeskInlineFilterTab(
+                        label = stringResource(R.string.ui_desk_filter_audio),
+                        selected = deskFilter == DeskFilter.AUDIO,
+                        onClick = { deskFilter = DeskFilter.AUDIO }
+                    )
+                    DeskInlineFilterTab(
+                        label = stringResource(R.string.ui_desk_filter_images),
+                        selected = deskFilter == DeskFilter.IMAGES,
+                        onClick = { deskFilter = DeskFilter.IMAGES }
+                    )
+                    if (activeTagFilter != null) {
+                        Surface(
+                            onClick = onClearTagFilter,
+                            color = SignalSoft,
+                            shape = RoundedCornerShape(999.dp),
+                            border = BorderStroke(1.dp, Signal.copy(alpha = 0.45f)),
+                            modifier = Modifier.heightIn(min = 38.dp)
+                        ) {
+                            Row(
+                                Modifier.padding(start = 12.dp, top = 8.dp, end = 10.dp, bottom = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("#$activeTagFilter", style = MaterialTheme.typography.labelSmall, color = SignalText)
+                                Spacer(Modifier.width(4.dp))
+                                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.ui_action_clear), tint = SignalText, modifier = Modifier.size(14.dp))
+                            }
+                        }
+                    }
+                }
+                HorizontalDivider(thickness = 1.dp, color = Line)
+            }
+        }
 
+        if (!searching) {
+            if (streamEntries.isEmpty()) {
+                item(contentType = "desk_empty") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 28.dp, vertical = 36.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.art_onboard_1),
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.size(120.dp)
+                        )
+                        Spacer(Modifier.height(14.dp))
+                        Text(
+                            text = stringResource(
+                                if (deskFilter != DeskFilter.ALL || activeTagFilter != null) {
+                                    R.string.ui_notes_filter_empty
+                                } else {
+                                    R.string.ui_notes_empty
+                                }
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Ink2
+                        )
+                    }
+                }
+            } else {
+                items(
+                    streamEntries,
+                    key = { entry ->
+                        when (entry) {
+                            is FeedEntry.NoteEntry -> "n_${entry.note.id}"
+                            is FeedEntry.MediaEntry -> "m_${entry.media.id}"
+                        }
+                    },
+                    contentType = { entry ->
+                        when (entry) {
+                            is FeedEntry.NoteEntry -> "note_row"
+                            is FeedEntry.MediaEntry -> "media_row"
+                        }
+                    }
+                ) { entry ->
+                    when (entry) {
+                        is FeedEntry.NoteEntry -> {
+                            EditorialNoteRow(
+                                note = entry.note,
+                                spaceName = entry.note.spaceId?.let { spaceNames[it] },
+                                mediaCount = mediaNoteCounts[entry.note.id] ?: 0,
+                                onClick = { onOpen(entry.note) },
+                                onDelete = { noteToDelete = entry.note }
+                            )
+                        }
+                        is FeedEntry.MediaEntry -> {
+                            EditorialMediaRow(
+                                media = entry.media,
+                                spaceName = spaceNames[entry.media.spaceId],
+                                onClick = { onOpenMedia(entry.media) }
+                            )
+                        }
+                    }
+                    HorizontalDivider(thickness = 1.dp, color = Line)
+                }
+            }
+        } else {
+            val showNotes = searchScope == SearchScope.ALL || searchScope == SearchScope.NOTES
+            val showMedia = searchScope == SearchScope.ALL || searchScope == SearchScope.MEDIA
+            val showReports = searchScope == SearchScope.ALL || searchScope == SearchScope.REPORTS
             val totalShown = (if (showNotes) filteredNotes.size else 0) +
                 (if (showMedia) matchingMedia.size else 0) +
                 (if (showReports) matchingArtifacts.size else 0)
 
             if (totalShown == 0) {
-                item(contentType = "empty") {
+                item(contentType = "search_empty") {
                     Text(
-                        stringResource(if (isFiltered) R.string.ui_notes_filter_empty else R.string.ui_notes_empty),
+                        stringResource(R.string.ui_notes_filter_empty),
                         style = MaterialTheme.typography.bodyMedium,
                         color = Ink2,
-                        modifier = Modifier.padding(20.dp)
+                        modifier = Modifier.padding(24.dp)
                     )
                 }
             }
 
-            if (showNotes) {
-                items(filteredNotes, key = { it.id }, contentType = { "note" }) { note ->
-                    Box(Modifier.padding(horizontal = 20.dp)) {
-                        NoteCard(
-                            note = note,
-                            spaceName = note.spaceId?.let { spaceNames[it] },
-                            mediaCount = mediaNoteCounts[note.id] ?: 0,
-                            onClick = { onOpen(note) },
-                            onDelete = { noteToDelete = note }
-                        )
-                    }
+            if (showNotes && filteredNotes.isNotEmpty()) {
+                item(contentType = "search_notes_div") {
+                    HorizontalDivider(thickness = 1.dp, color = Line)
+                }
+                items(filteredNotes, key = { "sn_${it.id}" }, contentType = { "note_row" }) { note ->
+                    EditorialNoteRow(
+                        note = note,
+                        spaceName = note.spaceId?.let { spaceNames[it] },
+                        mediaCount = mediaNoteCounts[note.id] ?: 0,
+                        onClick = { onOpen(note) },
+                        onDelete = { noteToDelete = note }
+                    )
+                    HorizontalDivider(thickness = 1.dp, color = Line)
                 }
             }
 
@@ -493,11 +638,11 @@ internal fun NotesScreen(
                     Text(
                         stringResource(R.string.ui_search_section_media).uppercase(),
                         style = MaterialTheme.typography.labelSmall,
-                        color = Blue,
-                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp)
+                        color = BlueText,
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 6.dp)
                     )
                 }
-                items(matchingMedia, key = { "media_${it.id}" }, contentType = { "search_media" }) { item ->
+                items(matchingMedia, key = { "sm_${it.id}" }, contentType = { "search_media" }) { item ->
                     val snippet = remember(item.ocrText, item.caption, trimmedQuery) {
                         when {
                             item.ocrText.contains(trimmedQuery, ignoreCase = true) ->
@@ -506,7 +651,7 @@ internal fun NotesScreen(
                             else -> ""
                         }
                     }
-                    Box(Modifier.padding(horizontal = 20.dp)) {
+                    Box(Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
                         SearchMediaHitCard(
                             media = item,
                             spaceName = spaceNames[item.spaceId],
@@ -523,22 +668,22 @@ internal fun NotesScreen(
                         stringResource(R.string.ui_search_section_reports).uppercase(),
                         style = MaterialTheme.typography.labelSmall,
                         color = Mint,
-                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp)
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 6.dp)
                     )
                 }
-                items(matchingArtifacts, key = { "art_${it.id}" }, contentType = { "search_report" }) { art ->
+                items(matchingArtifacts, key = { "sr_${it.id}" }, contentType = { "search_report" }) { art ->
                     val spec = LensStore.byId(art.kind)
                     val title = if (spec != null) lensName(spec) else art.kind
                     val snippet = remember(art.body, trimmedQuery) { extractMatchSnippet(art.body, trimmedQuery) }
-                    Box(Modifier.padding(horizontal = 20.dp)) {
+                    Box(Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
                         Surface(
                             onClick = { onOpenSpaceLens(art.spaceId, art.kind) },
                             color = Surface1,
-                            shape = RoundedCornerShape(20.dp),
-                            border = BorderStroke(1.dp, Mint.copy(alpha = 0.35f)),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, Mint.copy(alpha = 0.4f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(Modifier.padding(16.dp)) {
+                            Column(Modifier.padding(14.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, color = Mint)
                                     spaceNames[art.spaceId]?.let { sp ->
@@ -561,21 +706,6 @@ internal fun NotesScreen(
                 }
             }
         }
-
-        FloatingActionButton(
-            onClick = onNewNote,
-            containerColor = SignalFill,
-            contentColor = Color.White,
-            shape = CircleShape,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(20.dp)
-        ) {
-            Icon(
-                Icons.Filled.Add,
-                contentDescription = stringResource(R.string.ui_notes_new_note)
-            )
-        }
     }
 
     val pendingDelete = noteToDelete
@@ -591,6 +721,366 @@ internal fun NotesScreen(
                 onDeleteNote(pendingDelete)
             }
         )
+    }
+}
+
+@Composable
+private fun DeskSpaceSpineCard(
+    space: Space,
+    spineColor: Color,
+    noteCount: Int,
+    mediaCount: Int,
+    isFilingTarget: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        color = Surface1,
+        shape = RoundedCornerShape(4.dp),
+        border = BorderStroke(1.dp, if (isFilingTarget) spineColor.copy(alpha = 0.65f) else Line),
+        modifier = Modifier
+            .width(132.dp)
+            .height(84.dp)
+    ) {
+        Row(Modifier.fillMaxSize()) {
+            Box(
+                Modifier
+                    .width(5.dp)
+                    .fillMaxHeight()
+                    .background(spineColor)
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(horizontal = 10.dp, vertical = 9.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = space.name,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = EditorialSerif,
+                        fontSize = 14.sp,
+                        lineHeight = 18.sp
+                    ),
+                    color = Ink,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    val total = noteCount + mediaCount
+                    Text(
+                        text = "$total",
+                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = EditorialMono),
+                        color = Ink2
+                    )
+                    if (isFilingTarget) {
+                        Box(
+                            Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(spineColor)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeskInlineFilterTab(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        color = if (selected) SignalSoft else Color.Transparent,
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, if (selected) Signal.copy(alpha = 0.45f) else Line),
+        modifier = Modifier.heightIn(min = 38.dp)
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontFamily = if (selected) EditorialSerif else MaterialTheme.typography.labelMedium.fontFamily
+                ),
+                color = if (selected) SignalText else Ink2,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+/**
+ * Full-bleed edge-to-edge editorial margin-note row (NO card box).
+ * Left 3dp colored mode bar: Signal for voice, Mint for text.
+ */
+@Composable
+internal fun EditorialNoteRow(
+    note: NoteItem,
+    spaceName: String? = null,
+    mediaCount: Int = 0,
+    onClick: () -> Unit,
+    onDelete: (() -> Unit)? = null
+) {
+    var menuOpen by remember(note.id) { mutableStateOf(false) }
+    val barColor = if (note.audioPath != null) Signal else Mint
+    val snippet = remember(note.oneLine, note.items, note.verbatim) {
+        when {
+            note.oneLine.isNotBlank() -> note.oneLine
+            note.items.isNotEmpty() -> note.items.take(3).joinToString(" · ")
+            note.verbatim.isNotBlank() -> note.verbatim
+            else -> ""
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .height(IntrinsicSize.Min)
+            .padding(start = 20.dp, end = if (onDelete != null) 6.dp else 20.dp, top = 14.dp, bottom = 14.dp)
+    ) {
+        Box(
+            Modifier
+                .width(3.dp)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(2.dp))
+                .background(barColor)
+        )
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = whenLabel(note.whenText),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = EditorialMono,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    color = Ink2
+                )
+                if (spaceName != null) {
+                    Text(
+                        text = " · $spaceName",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SignalText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                if (note.editedAt != null) {
+                    EditedBadge()
+                    Spacer(Modifier.width(6.dp))
+                }
+                ModeChip(note.mode)
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = note.title,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontFamily = EditorialSerif,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 17.sp,
+                    lineHeight = 22.sp
+                ),
+                color = Ink,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (snippet.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = snippet,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Ink2,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (note.audioPath != null || mediaCount > 0 || note.followUps.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (note.audioPath != null) {
+                        Text(
+                            stringResource(R.string.ui_note_audio_label),
+                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = EditorialMono),
+                            color = SignalText
+                        )
+                    }
+                    if (note.followUps.isNotEmpty()) {
+                        Text(
+                            if (note.followUps.size == 1) stringResource(R.string.ui_followup_count_one)
+                            else stringResource(R.string.ui_followup_count_many, note.followUps.size),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = BlueText
+                        )
+                    }
+                    if (mediaCount > 0) {
+                        Text(
+                            if (mediaCount == 1) stringResource(R.string.ui_media_count_one)
+                            else stringResource(R.string.ui_media_count_many, mediaCount),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Ink2
+                        )
+                    }
+                }
+            }
+        }
+        if (onDelete != null) {
+            Box(Modifier.align(Alignment.Top)) {
+                Surface(
+                    onClick = { menuOpen = true },
+                    color = Color.Transparent,
+                    shape = CircleShape,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Filled.MoreVert,
+                            contentDescription = stringResource(R.string.ui_action_more),
+                            tint = Ink2,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.ui_note_delete_confirm), color = Red) },
+                        onClick = {
+                            menuOpen = false
+                            onDelete()
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Full-bleed edge-to-edge editorial image/media row (left 3dp Blue bar).
+ */
+@Composable
+private fun EditorialMediaRow(
+    media: MediaItem,
+    spaceName: String?,
+    onClick: () -> Unit
+) {
+    val thumbFile = remember(media.id, media.thumb, media.file) {
+        MediaStore.resolveFile(media.thumb.ifBlank { media.file })
+    }
+    var thumb by remember(thumbFile) {
+        mutableStateOf(thumbFile?.let { MediaBitmapCache.peekFile(it, 240) })
+    }
+    var loadAttempted by remember(thumbFile) { mutableStateOf(thumb != null) }
+    LaunchedEffect(thumbFile) {
+        if (thumb == null && thumbFile != null) {
+            thumb = MediaBitmapCache.loadFile(thumbFile, 240)
+        }
+        loadAttempted = true
+    }
+
+    val timeLabel = remember(media.addedAt) {
+        if (media.addedAt <= 0L) ""
+        else Instant.ofEpochMilli(media.addedAt)
+            .atZone(ZoneId.systemDefault())
+            .format(DESK_MEDIA_FMT.withLocale(Locale.getDefault()))
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .height(IntrinsicSize.Min)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .width(3.dp)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(2.dp))
+                .background(Blue)
+        )
+        Spacer(Modifier.width(14.dp))
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(Surface2)
+                .border(1.dp, Line, RoundedCornerShape(4.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            val bmp = thumb
+            if (bmp != null) {
+                Image(
+                    bitmap = bmp,
+                    contentDescription = media.caption.ifBlank { stringResource(R.string.ui_media_viewer_title) },
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else if (loadAttempted) {
+                Icon(
+                    Icons.Filled.Warning,
+                    contentDescription = stringResource(R.string.ui_media_missing),
+                    tint = Ink2,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (timeLabel.isNotBlank()) {
+                    Text(
+                        text = timeLabel,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = EditorialMono,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        color = Ink2
+                    )
+                }
+                if (spaceName != null) {
+                    Text(
+                        text = if (timeLabel.isNotBlank()) " · $spaceName" else spaceName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = BlueText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = media.caption.ifBlank {
+                    media.ocrText.lineSequence().firstOrNull { it.isNotBlank() }?.take(72)
+                        ?: stringResource(R.string.ui_media_no_caption)
+                },
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontFamily = EditorialSerif,
+                    fontSize = 15.sp
+                ),
+                color = if (media.caption.isBlank() && media.ocrText.isBlank()) Ink2 else Ink,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -616,8 +1106,8 @@ private fun SearchMediaHitCard(
     Surface(
         onClick = onClick,
         color = Surface1,
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, Blue.copy(alpha = 0.32f)),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, Blue.copy(alpha = 0.35f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -627,10 +1117,10 @@ private fun SearchMediaHitCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(60.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(6.dp))
                     .background(Surface2)
-                    .border(1.dp, Line, RoundedCornerShape(12.dp)),
+                    .border(1.dp, Line, RoundedCornerShape(6.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 val bmp = thumb
@@ -664,7 +1154,7 @@ private fun SearchMediaHitCard(
                     Spacer(Modifier.height(4.dp))
                     Text(
                         media.caption,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleMedium.copy(fontFamily = EditorialSerif),
                         color = Ink,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -858,82 +1348,87 @@ internal fun NoteDetailScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Row(
-                Modifier.padding(start = 8.dp, end = 8.dp, top = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                BackIconButton(onClick = onBack)
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    stringResource(R.string.ui_note_label),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Ink2,
-                    modifier = Modifier.weight(1f)
-                )
-                PillButton(
-                    stringResource(R.string.ui_note_reanalyze),
-                    Surface2,
-                    Ink,
-                    { reprocessing = true },
-                    enabled = note.verbatim.isNotBlank() && !reanalyzing
-                )
-                Spacer(Modifier.width(8.dp))
-                PillButton(
-                    stringResource(R.string.ui_action_edit),
-                    Surface2,
-                    Ink,
-                    onEdit,
-                    enabled = !reanalyzing
-                )
-                Box {
-                    Surface(
-                        onClick = { menuOpen = true },
-                        color = Color.Transparent,
-                        shape = CircleShape,
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Filled.MoreVert,
-                                contentDescription = stringResource(R.string.ui_action_more),
-                                tint = Ink,
-                                modifier = Modifier.size(20.dp)
+            Column {
+                Row(
+                    Modifier.padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    BackIconButton(onClick = onBack)
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        stringResource(R.string.ui_note_label),
+                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = EditorialMono),
+                        color = Ink2,
+                        modifier = Modifier.weight(1f)
+                    )
+                    PillButton(
+                        stringResource(R.string.ui_note_reanalyze),
+                        Surface1,
+                        Ink,
+                        { reprocessing = true },
+                        enabled = note.verbatim.isNotBlank() && !reanalyzing,
+                        border = BorderStroke(1.dp, Line)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    PillButton(
+                        stringResource(R.string.ui_action_edit),
+                        Surface1,
+                        Ink,
+                        onEdit,
+                        enabled = !reanalyzing,
+                        border = BorderStroke(1.dp, Line)
+                    )
+                    Box {
+                        Surface(
+                            onClick = { menuOpen = true },
+                            color = Color.Transparent,
+                            shape = CircleShape,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Filled.MoreVert,
+                                    contentDescription = stringResource(R.string.ui_action_more),
+                                    tint = Ink,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        stringResource(
+                                            if (reminder != null) R.string.ui_note_change_reminder
+                                            else R.string.ui_note_set_reminder
+                                        ),
+                                        color = if (reminder != null) BlueText else Ink
+                                    )
+                                },
+                                onClick = {
+                                    menuOpen = false
+                                    pickingReminder = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.ui_note_share), color = Ink) },
+                                onClick = {
+                                    menuOpen = false
+                                    shareNote()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.ui_note_delete_confirm), color = Red) },
+                                enabled = !reanalyzing,
+                                onClick = {
+                                    menuOpen = false
+                                    confirmingDelete = true
+                                }
                             )
                         }
                     }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    stringResource(
-                                        if (reminder != null) R.string.ui_note_change_reminder
-                                        else R.string.ui_note_set_reminder
-                                    ),
-                                    color = if (reminder != null) BlueText else Ink
-                                )
-                            },
-                            onClick = {
-                                menuOpen = false
-                                pickingReminder = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.ui_note_share), color = Ink) },
-                            onClick = {
-                                menuOpen = false
-                                shareNote()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.ui_note_delete_confirm), color = Red) },
-                            enabled = !reanalyzing,
-                            onClick = {
-                                menuOpen = false
-                                confirmingDelete = true
-                            }
-                        )
-                    }
                 }
+                HorizontalDivider(thickness = 1.dp, color = Line)
             }
         }
         if (reanalyzing || reanalyzeFailed) {
@@ -971,7 +1466,11 @@ internal fun NoteDetailScreen(
                         EditedBadge()
                         Spacer(Modifier.width(8.dp))
                     }
-                    Text(whenLabel(note.whenText), style = MaterialTheme.typography.labelSmall, color = Ink2)
+                    Text(
+                        whenLabel(note.whenText),
+                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = EditorialMono),
+                        color = Ink2
+                    )
                 }
                 Spacer(Modifier.height(14.dp))
                 Text(note.title, style = MaterialTheme.typography.headlineMedium, color = Ink)
@@ -1027,10 +1526,10 @@ internal fun NoteDetailScreen(
                             val links = remember(item) { linkRanges(item) }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    if (noteFormat.ordered) "${index + 1}" else "•",
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    if (noteFormat.ordered) "${index + 1}." else "•",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = EditorialMono),
                                     color = SignalText,
-                                    modifier = Modifier.width(22.dp)
+                                    modifier = Modifier.width(24.dp)
                                 )
                                 LinkifiedText(
                                     text = item,
@@ -1072,7 +1571,7 @@ internal fun NoteDetailScreen(
             Surface(
                 onClick = { picking = true },
                 color = Surface1,
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(8.dp),
                 border = BorderStroke(1.dp, if (note.spaceId == null) Line else Signal.copy(alpha = 0.45f)),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1080,13 +1579,13 @@ internal fun NoteDetailScreen(
                     .heightIn(min = 48.dp)
             ) {
                 Row(
-                    Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+                    Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(stringResource(R.string.ui_note_space_label), style = MaterialTheme.typography.bodyMedium, color = Ink2)
                     Text(
                         spaceName ?: stringResource(R.string.ui_space_none),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = EditorialSerif),
                         color = if (spaceName == null) Ink2 else SignalText,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -1122,14 +1621,14 @@ internal fun NoteDetailScreen(
                         note.followUps.forEachIndexed { idx, fu ->
                             Surface(
                                 color = Surface1,
-                                shape = RoundedCornerShape(18.dp),
-                                border = BorderStroke(1.dp, Blue.copy(alpha = 0.28f)),
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, Blue.copy(alpha = 0.30f)),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text(
                                         whenLabel(fu.whenText),
-                                        style = MaterialTheme.typography.labelSmall,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = EditorialMono),
                                         color = BlueText
                                     )
                                     LinkifiedText(
@@ -1155,12 +1654,12 @@ internal fun NoteDetailScreen(
                     if (recordingFollowUp) {
                         Surface(
                             color = SignalSoft,
-                            shape = RoundedCornerShape(20.dp),
+                            shape = RoundedCornerShape(8.dp),
                             border = BorderStroke(1.dp, Signal),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
-                                Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
@@ -1177,7 +1676,7 @@ internal fun NoteDetailScreen(
                                     )
                                     Text(
                                         formatDuration(followElapsed),
-                                        style = MaterialTheme.typography.titleMedium,
+                                        style = MaterialTheme.typography.titleMedium.copy(fontFamily = EditorialMono),
                                         color = Ink
                                     )
                                 }
@@ -1199,7 +1698,7 @@ internal fun NoteDetailScreen(
                         Surface(
                             onClick = onStartFollowUp,
                             color = Surface1,
-                            shape = RoundedCornerShape(18.dp),
+                            shape = RoundedCornerShape(8.dp),
                             border = BorderStroke(1.dp, Line),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1238,7 +1737,7 @@ internal fun NoteDetailScreen(
                     LinkifiedText(
                         text = note.why,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Blue
+                        color = BlueText
                     )
                 }
             }
@@ -1257,8 +1756,9 @@ internal fun NoteDetailScreen(
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                                     PillButton(
                                         label = stringResource(R.string.ui_question_resolve),
-                                        background = Surface2,
+                                        background = MintSoft,
                                         foreground = Mint,
+                                        border = BorderStroke(1.dp, Mint.copy(alpha = 0.4f)),
                                         onClick = { onResolveQuestion(q) }
                                     )
                                 }
@@ -1411,11 +1911,11 @@ private fun AudioPlayerBar(
     val progress = (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
     Surface(
         color = Surface1,
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, Line),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = horizontalPadding)
-            .border(1.dp, Line, RoundedCornerShape(20.dp))
     ) {
         Row(
             Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -1465,7 +1965,7 @@ private fun AudioPlayerBar(
                     Text(stringResource(R.string.ui_note_audio_label), style = MaterialTheme.typography.labelSmall, color = Ink2)
                     Text(
                         "${formatDuration(positionMs / 1000)} / ${formatDuration(durationMs / 1000)}",
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = EditorialMono),
                         color = Ink2
                     )
                 }
@@ -1492,7 +1992,7 @@ private fun ReprocessDialog(
     val modelMissing = chosen.usesLlm && !TransformModel.installed
 
     AppDialogSurface(onDismissRequest = onDismiss) {
-        Text(stringResource(R.string.ui_reprocess_title), style = MaterialTheme.typography.titleMedium, color = Ink)
+        Text(stringResource(R.string.ui_reprocess_title), style = MaterialTheme.typography.headlineSmall, color = Ink)
         Spacer(Modifier.height(10.dp))
         Text(
             stringResource(R.string.ui_reprocess_body),
@@ -1503,7 +2003,7 @@ private fun ReprocessDialog(
             Spacer(Modifier.height(10.dp))
             Surface(
                 color = Surface2,
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(8.dp),
                 border = BorderStroke(1.dp, Amber.copy(alpha = 0.5f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -1542,12 +2042,13 @@ private fun ReprocessDialog(
 private fun DetailSection(label: String, body: @Composable () -> Unit) {
     Surface(
         color = Surface1,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, Line),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
     ) {
-        Column(Modifier.padding(18.dp)) {
+        Column(Modifier.padding(16.dp)) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = Ink2)
             Spacer(Modifier.height(10.dp))
             body()
@@ -1611,7 +2112,7 @@ internal fun NoteEditorScreen(
             .imePadding()
     ) {
         Row(
-            Modifier.padding(start = 8.dp, end = 20.dp, top = 16.dp),
+            Modifier.padding(start = 8.dp, end = 20.dp, top = 12.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             BackIconButton(
@@ -1621,7 +2122,7 @@ internal fun NoteEditorScreen(
             Spacer(Modifier.width(4.dp))
             Text(
                 stringResource(R.string.ui_editor_title),
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = EditorialMono),
                 color = Ink2,
                 modifier = Modifier.weight(1f)
             )
@@ -1663,6 +2164,7 @@ internal fun NoteEditorScreen(
                 }
             )
         }
+        HorizontalDivider(thickness = 1.dp, color = Line)
 
         if (validationError) {
             Text(
@@ -1726,11 +2228,10 @@ internal fun NoteEditorScreen(
                 }
             }
 
-            // Progressive disclosure for secondary fields
             Surface(
                 onClick = { showDetails = !showDetails },
                 color = Surface1,
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(8.dp),
                 border = BorderStroke(1.dp, Line),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1819,7 +2320,7 @@ internal fun NoteEditorScreen(
 
 private val wordGap = Regex("\\s+")
 
-private fun derivedTitle(text: String, fallback: String): String {
+internal fun derivedNoteTitle(text: String, fallback: String): String {
     val words = text.trim()
         .split(wordGap)
         .filter { it.isNotEmpty() }
@@ -1891,7 +2392,7 @@ internal fun NewNoteScreen(
                 StoredNote(
                     id = newId,
                     title = typedTitle.ifBlank {
-                        fields?.title?.takeIf { it.isNotBlank() } ?: derivedTitle(typed, untitled)
+                        fields?.title?.takeIf { it.isNotBlank() } ?: derivedNoteTitle(typed, untitled)
                     },
                     oneLine = fields?.oneLine ?: "",
                     mode = fields?.mode ?: "Note",
@@ -1933,7 +2434,7 @@ internal fun NewNoteScreen(
             .imePadding()
     ) {
         Row(
-            Modifier.padding(start = 8.dp, end = 20.dp, top = 16.dp),
+            Modifier.padding(start = 8.dp, end = 20.dp, top = 12.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             BackIconButton(
@@ -1944,7 +2445,7 @@ internal fun NewNoteScreen(
             Spacer(Modifier.width(4.dp))
             Text(
                 stringResource(R.string.ui_new_note_title),
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = EditorialMono),
                 color = Ink2,
                 modifier = Modifier.weight(1f)
             )
@@ -1956,6 +2457,7 @@ internal fun NewNoteScreen(
                 enabled = canSave
             )
         }
+        HorizontalDivider(thickness = 1.dp, color = Line)
 
         if (saving) {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
@@ -2006,7 +2508,7 @@ internal fun NewNoteScreen(
                     onClick = { pickingSpace = true },
                     enabled = !saving,
                     color = Surface1,
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(8.dp),
                     border = BorderStroke(1.dp, if (selectedSpaceId == null) Line else Signal.copy(alpha = 0.45f)),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -2018,7 +2520,7 @@ internal fun NewNoteScreen(
                     ) {
                         Text(
                             spaceName ?: stringResource(R.string.ui_space_none),
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = EditorialSerif),
                             color = if (spaceName == null) Ink2 else SignalText,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,

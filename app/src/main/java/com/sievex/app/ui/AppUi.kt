@@ -18,6 +18,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas as ComposeCanvas
 import androidx.compose.foundation.background
@@ -45,7 +47,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -56,7 +58,6 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -76,6 +77,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -96,6 +98,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.sievex.app.AppLocale
 import com.sievex.app.CaptureLog
 import com.sievex.app.CaptureService
 import com.sievex.app.Formats
@@ -115,12 +118,17 @@ import com.sievex.app.ReminderStore
 import com.sievex.app.ReminderTargetType
 import com.sievex.app.Space
 import com.sievex.app.SpaceStore
+import com.sievex.app.StoredNote
 import com.sievex.app.asr.ModelInstaller
+import com.sievex.app.llm.Transform
 import com.sievex.app.llm.TransformModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 data class NoteItem(
     val id: Long = 0L,
@@ -197,6 +205,7 @@ internal fun readSnapshot(): UiSnapshot {
     )
 }
 
+@Composable
 internal fun modeColor(mode: String): Color = when (mode) {
     "Insight" -> SignalText
     "Idea" -> Blue
@@ -304,13 +313,14 @@ internal fun LinkifiedText(
     val clipboard = LocalClipboardManager.current
     val uriHandler = LocalUriHandler.current
     val openFailed = stringResource(R.string.common_link_open_failed)
+    val linkColor = SignalText
 
-    val annotated = remember(text, ranges) {
+    val annotated = remember(text, ranges, linkColor) {
         buildAnnotatedString {
             append(text)
             ranges.forEach { range ->
                 addStyle(
-                    SpanStyle(color = SignalText, textDecoration = TextDecoration.Underline),
+                    SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline),
                     range.first,
                     range.last + 1
                 )
@@ -382,8 +392,8 @@ internal fun ModeChip(mode: String) {
     val c = modeColor(mode)
     Box(
         Modifier
-            .border(1.dp, c.copy(alpha = 0.55f), CircleShape)
-            .padding(horizontal = 10.dp, vertical = 4.dp)
+            .border(1.dp, c.copy(alpha = 0.55f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
     ) {
         Text(modeLabel(mode).uppercase(), style = MaterialTheme.typography.labelSmall, color = c)
     }
@@ -393,8 +403,8 @@ internal fun ModeChip(mode: String) {
 internal fun EditedBadge() {
     Box(
         Modifier
-            .border(1.dp, Line, CircleShape)
-            .padding(horizontal = 8.dp, vertical = 3.dp)
+            .border(1.dp, Line, RoundedCornerShape(4.dp))
+            .padding(horizontal = 7.dp, vertical = 2.dp)
     ) {
         Text(stringResource(R.string.ui_note_edited), style = MaterialTheme.typography.labelSmall, color = Ink2)
     }
@@ -409,7 +419,7 @@ internal fun SpacePickerDialog(
     onDismiss: () -> Unit
 ) {
     AppDialogSurface(onDismissRequest = onDismiss) {
-        Text(title, style = MaterialTheme.typography.titleMedium, color = Ink)
+        Text(title, style = MaterialTheme.typography.headlineSmall, color = Ink)
         Spacer(Modifier.height(14.dp))
         Column(
             Modifier
@@ -439,8 +449,9 @@ internal fun PickerRow(label: String, selected: Boolean, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(if (selected) SignalSoft else Surface2)
+            .border(1.dp, if (selected) Signal.copy(alpha = 0.45f) else Line, RoundedCornerShape(8.dp))
             .clickable { onClick() }
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -475,7 +486,7 @@ internal fun SpaceNameDialog(
     val isDuplicate = clean.isNotEmpty() && existingSpaces.any { it.name.equals(clean, ignoreCase = true) }
 
     AppDialogSurface(onDismissRequest = onDismiss, modifier = Modifier.imePadding()) {
-        Text(title, style = MaterialTheme.typography.titleMedium, color = Ink)
+        Text(title, style = MaterialTheme.typography.headlineSmall, color = Ink)
         Spacer(Modifier.height(14.dp))
         EditorField(
             label = "",
@@ -524,10 +535,13 @@ fun SievexApp(
     onInitialTargetConsumed: () -> Unit = {},
     onInitialStartBurstConsumed: () -> Unit = {}
 ) {
+    // 3-Tab Editorial Spine: 0 = Desk, 1 = Spaces, 2 = Triage
     var tab by rememberSaveable { mutableStateOf(0) }
     var openNoteId by rememberSaveable { mutableStateOf<Long?>(null) }
     var openSpaceId by rememberSaveable { mutableStateOf<String?>(null) }
     var openSpaceLensId by rememberSaveable { mutableStateOf<String?>(null) }
+    var openSettings by rememberSaveable { mutableStateOf(false) }
+    var showCaptureSheet by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
 
     var onboarded by remember { mutableStateOf(OnboardingPrefs.done(context)) }
@@ -575,6 +589,7 @@ fun SievexApp(
     var editingNoteId by rememberSaveable { mutableStateOf<Long?>(null) }
     var composingNote by rememberSaveable { mutableStateOf(false) }
     var notesTagFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    var savingQuickJot by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -613,8 +628,12 @@ fun SievexApp(
                 mediaId != null -> {
                     CaptureService.sendBurstWithMedia(context, listOf(mediaId), mediaSpaceId, "media grant")
                     tab = 0
+                    showCaptureSheet = true
                 }
-                action != null -> CaptureService.send(context, action, "after grant")
+                action != null -> {
+                    CaptureService.send(context, action, "after grant")
+                    if (action == CaptureService.ACTION_START_BURST) showCaptureSheet = true
+                }
             }
         } else {
             CaptureLog.add("microphone permission denied")
@@ -721,7 +740,9 @@ fun SievexApp(
         openNoteId = null
         openSpaceId = null
         openSpaceLensId = null
+        openSettings = false
         tab = 0
+        showCaptureSheet = true
         val busy = Pipeline.stage == PipelineStage.TRANSCRIBING ||
             Pipeline.stage == PipelineStage.TRANSFORMING
         if (!busy && !CaptureService.isRecording) {
@@ -747,8 +768,9 @@ fun SievexApp(
             editingNoteId = null
             openMediaId = null
             openSpaceId = null
+            openSettings = false
             openNoteId = wanted
-            tab = 2
+            tab = 0
         }
         pendingNoteId = null
         onInitialTargetConsumed()
@@ -760,6 +782,7 @@ fun SievexApp(
             composingNote = false
             editingNoteId = null
             openNoteId = null
+            openSettings = false
             openMediaId = wanted
             tab = 1
         }
@@ -774,6 +797,7 @@ fun SievexApp(
             openMediaId = null
             editingNoteId = null
             openNoteId = null
+            openSettings = false
             openSpaceLensId = pendingLensId
             openSpaceId = wanted
             tab = 1
@@ -786,8 +810,9 @@ fun SievexApp(
     val editingNote = notes.firstOrNull { it.id == editingNoteId }
     val openNote = notes.firstOrNull { it.id == openNoteId }
     val openSpace = spaces.firstOrNull { it.id == openSpaceId }
+    val appendNoteTitle = recordingAppendNoteId?.let { id -> notes.firstOrNull { it.id == id }?.title }
 
-    val hasDetailOverlay = openSpace != null || openNote != null || composingNote || editingNote != null
+    val hasDetailOverlay = openSettings || openSpace != null || openNote != null || composingNote || editingNote != null
     BackHandler(enabled = hasDetailOverlay) {
         when {
             editingNote != null -> editingNoteId = null
@@ -797,6 +822,7 @@ fun SievexApp(
                 openSpaceId = null
                 openSpaceLensId = null
             }
+            openSettings -> openSettings = false
         }
     }
 
@@ -804,119 +830,103 @@ fun SievexApp(
         runCatching { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
     }
 
+    val modelsReady = ModelInstaller.installed &&
+        (TransformModel.installed || Formats.next == NoteFormat.PLAIN)
+
+    val toggleRecording: () -> Unit = {
+        val busy = Pipeline.stage == PipelineStage.TRANSCRIBING ||
+            Pipeline.stage == PipelineStage.TRANSFORMING
+        if (!busy) {
+            if (recording) {
+                CaptureService.trigger(false, "record screen stop")
+            } else if (ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
+                Pipeline.reset()
+                CaptureService.send(context, CaptureService.ACTION_START_BURST, "record screen")
+                showCaptureSheet = true
+            } else {
+                Pipeline.reset()
+                pendingAudioAction = CaptureService.ACTION_START_BURST
+                audioPerm.launch(Manifest.permission.RECORD_AUDIO)
+            }
+        }
+    }
+
+    val toggleArm: (Boolean) -> Unit = { wantArm ->
+        if (wantArm) {
+            if (ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
+                CaptureService.send(context, CaptureService.ACTION_ARM)
+            } else {
+                pendingAudioAction = CaptureService.ACTION_ARM
+                audioPerm.launch(Manifest.permission.RECORD_AUDIO)
+            }
+        } else {
+            CaptureService.send(context, CaptureService.ACTION_DISARM)
+        }
+    }
+
     val actionCompletedToast = stringResource(R.string.ui_actions_completed_toast)
     val actionReopenedToast = stringResource(R.string.ui_actions_reopened_toast)
     val undoLabel = stringResource(R.string.ui_action_undo)
+    val untitledLabel = stringResource(R.string.common_untitled_note)
 
     Box(Modifier.fillMaxSize()) {
-        // Scaffold stays mounted at all times so tab scroll states survive opening notes or spaces.
+        // Scaffold stays mounted at all times so tab scroll states survive opening notes, spaces, or sheets.
         Scaffold(
             containerColor = Canvas,
             snackbarHost = { SnackbarHost(snackbarHostState) },
             bottomBar = {
-                NavigationBar(containerColor = Surface1, tonalElevation = 0.dp) {
-                    NavItem(0, stringResource(R.string.ui_tab_record), tab, { tab = it }) {
-                        RecordTabIcon(selected = tab == 0)
-                    }
-                    NavItem(1, stringResource(R.string.ui_tab_spaces), tab, { tab = it }) {
-                        SpacesTabIcon(selected = tab == 1)
-                    }
-                    NavItem(2, stringResource(R.string.ui_tab_notes), tab, { tab = it }) {
-                        NotesTabIcon(selected = tab == 2)
-                    }
-                    NavItem(3, stringResource(R.string.ui_tab_actions), tab, { tab = it }) {
-                        Icon(
-                            Icons.Filled.Check,
-                            contentDescription = stringResource(R.string.ui_tab_actions),
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                    NavItem(4, stringResource(R.string.ui_tab_settings), tab, { tab = it }) {
-                        Icon(
-                            Icons.Filled.Settings,
-                            contentDescription = stringResource(R.string.ui_tab_settings),
-                            modifier = Modifier.size(22.dp)
-                        )
+                Column(Modifier.fillMaxWidth()) {
+                    CaptureStrip(
+                        spaceName = spaces.firstOrNull { it.id == currentSpaceId }?.name,
+                        armed = armed,
+                        recording = recording,
+                        notifAccess = notifAccess,
+                        modelsReady = modelsReady,
+                        onPickSpace = { pickingCurrentSpace = true },
+                        onOpenSheet = { showCaptureSheet = true },
+                        onQuickRecord = toggleRecording
+                    )
+                    HorizontalDivider(thickness = 1.dp, color = Line)
+                    NavigationBar(containerColor = Surface1, tonalElevation = 0.dp) {
+                        NavItem(0, stringResource(R.string.ui_tab_desk), tab, { tab = it }) {
+                            DeskTabIcon(selected = tab == 0)
+                        }
+                        NavItem(1, stringResource(R.string.ui_tab_spaces), tab, { tab = it }) {
+                            SpacesTabIcon(selected = tab == 1)
+                        }
+                        NavItem(2, stringResource(R.string.ui_tab_triage), tab, { tab = it }) {
+                            TriageTabIcon(selected = tab == 2)
+                        }
                     }
                 }
             }
         ) { pad ->
             Box(Modifier.padding(pad)) {
                 when (tab) {
-                    0 -> RecordScreen(
-                        armed = armed,
-                        recording = recording,
-                        notifAccess = notifAccess,
-                        modelsReady = ModelInstaller.installed &&
-                            (TransformModel.installed || Formats.next == NoteFormat.PLAIN),
-                        onToggle = {
-                            val busy = Pipeline.stage == PipelineStage.TRANSCRIBING ||
-                                Pipeline.stage == PipelineStage.TRANSFORMING
-                            if (!busy) {
-                                if (recording) {
-                                    CaptureService.trigger(false, "record screen stop")
-                                } else if (ContextCompat.checkSelfPermission(
-                                        context, Manifest.permission.RECORD_AUDIO
-                                    ) == PackageManager.PERMISSION_GRANTED
-                                ) {
-                                    Pipeline.reset()
-                                    CaptureService.send(context, CaptureService.ACTION_START_BURST, "record screen")
-                                } else {
-                                    Pipeline.reset()
-                                    pendingAudioAction = CaptureService.ACTION_START_BURST
-                                    audioPerm.launch(Manifest.permission.RECORD_AUDIO)
-                                }
-                            }
-                        },
-                        onCancelRecording = {
-                            CaptureService.cancelCurrentBurst()
-                        },
-                        onArm = {
-                            if (ContextCompat.checkSelfPermission(
-                                    context, Manifest.permission.RECORD_AUDIO
-                                ) == PackageManager.PERMISSION_GRANTED
-                            ) {
-                                CaptureService.send(context, CaptureService.ACTION_ARM)
-                            } else {
-                                pendingAudioAction = CaptureService.ACTION_ARM
-                                audioPerm.launch(Manifest.permission.RECORD_AUDIO)
-                            }
-                        },
-                        onDisarm = { CaptureService.send(context, CaptureService.ACTION_DISARM) },
-                        onOpenNotifAccess = openNotifAccessSettings,
-                        onOpenNote = { noteId ->
-                            Pipeline.reset()
-                            if (noteId != null) {
-                                openNoteId = noteId
-                            } else {
-                                tab = 2
-                            }
-                        },
-                        spaceName = spaces.firstOrNull { it.id == currentSpaceId }?.name,
-                        onPickSpace = { pickingCurrentSpace = true }
-                    )
-                    1 -> SpacesScreen(
-                        spaces = spaces,
-                        noteCounts = noteCounts,
-                        mediaCounts = mediaCounts,
-                        insights = insights,
-                        onNewSpace = { namingNewSpace = true },
-                        onOpen = {
-                            openSpaceLensId = null
-                            openSpaceId = it.id
-                        },
-                        onEditRequest = { editingSpaceTarget = it },
-                        onDeleteRequest = { deletingSpace = it }
-                    )
-                    2 -> NotesScreen(
+                    0 -> NotesScreen(
                         notes = notes,
                         spaces = spaces,
+                        currentSpaceId = currentSpaceId,
+                        noteCounts = noteCounts,
+                        mediaCounts = mediaCounts,
                         allMedia = media,
                         allArtifacts = allArtifacts,
                         mediaNoteCounts = mediaNoteCounts,
                         activeTagFilter = notesTagFilter,
                         onClearTagFilter = { notesTagFilter = null },
                         onNewNote = { composingNote = true },
+                        onNewSpace = { namingNewSpace = true },
+                        onOpenSpace = {
+                            openSpaceLensId = null
+                            openSpaceId = it.id
+                        },
+                        onOpenSettings = { openSettings = true },
                         onOpen = { openNoteId = it.id },
                         onOpenMedia = { openMediaId = it.id },
                         onOpenSpaceLens = { spaceId, lensId ->
@@ -935,7 +945,20 @@ fun SievexApp(
                             }
                         }
                     )
-                    3 -> {
+                    1 -> SpacesScreen(
+                        spaces = spaces,
+                        noteCounts = noteCounts,
+                        mediaCounts = mediaCounts,
+                        insights = insights,
+                        onNewSpace = { namingNewSpace = true },
+                        onOpen = {
+                            openSpaceLensId = null
+                            openSpaceId = it.id
+                        },
+                        onEditRequest = { editingSpaceTarget = it },
+                        onDeleteRequest = { deletingSpace = it }
+                    )
+                    2 -> {
                         val actionNotes = remember(notes) { notes.filter { it.mode == "Action" } }
                         val questionNotes = remember(notes) {
                             notes.filter {
@@ -1011,27 +1034,86 @@ fun SievexApp(
                             }
                         )
                     }
-                    4 -> SettingsScreen(
-                        armed = armed,
-                        recording = recording,
-                        notifAccess = notifAccess,
-                        micGranted = micGranted,
-                        postNotifsGranted = postNotifsGranted,
-                        onOpenNotifAccess = openNotifAccessSettings,
-                        onRequestMic = {
-                            pendingAudioAction = null
-                            audioPerm.launch(Manifest.permission.RECORD_AUDIO)
-                        },
-                        onRequestPostNotifs = {
-                            if (Build.VERSION.SDK_INT >= 33) {
-                                notifyPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            } else {
-                                openAppSettings()
-                            }
-                        }
-                    )
                 }
             }
+        }
+
+        // Expandable Full-Focus Editorial Capture Sheet
+        AnimatedVisibility(
+            visible = showCaptureSheet,
+            enter = fadeIn(tween(180)) + slideInVertically(tween(220)) { it / 3 },
+            exit = fadeOut(tween(140)) + slideOutVertically(tween(180)) { it / 3 }
+        ) {
+            FullFocusCaptureSheet(
+                armed = armed,
+                recording = recording,
+                notifAccess = notifAccess,
+                modelsReady = modelsReady,
+                spaceName = spaces.firstOrNull { it.id == currentSpaceId }?.name,
+                appendNoteTitle = appendNoteTitle,
+                savingQuickNote = savingQuickJot,
+                onPickSpace = { pickingCurrentSpace = true },
+                onToggleRecord = toggleRecording,
+                onCancelRecording = { CaptureService.cancelCurrentBurst() },
+                onArm = { toggleArm(true) },
+                onDisarm = { toggleArm(false) },
+                onOpenNotifAccess = openNotifAccessSettings,
+                onOpenNote = { noteId ->
+                    Pipeline.reset()
+                    if (noteId != null) openNoteId = noteId else tab = 0
+                },
+                onQuickJotSave = { text, chosenFormat ->
+                    if (savingQuickJot) return@FullFocusCaptureSheet
+                    savingQuickJot = true
+                    scope.launch {
+                        val (newId, snapshot) = withContext(Dispatchers.IO) {
+                            val shape = chosenFormat.usesLlm && TransformModel.isInstalled(context.filesDir)
+                            val (spaceNameForPrompt, spaceFocus) = SpaceStore.focusFor(currentSpaceId)
+                            val fields = if (shape) {
+                                Transform.apply(
+                                    context.filesDir,
+                                    text,
+                                    chosenFormat,
+                                    AppLocale.modelLanguage(context),
+                                    spaceName = spaceNameForPrompt,
+                                    spaceFocus = spaceFocus
+                                )
+                            } else {
+                                null
+                            }
+                            val id = NoteStore.nextId()
+                            NoteStore.add(
+                                StoredNote(
+                                    id = id,
+                                    title = fields?.title?.takeIf { it.isNotBlank() }
+                                        ?: derivedNoteTitle(text, untitledLabel),
+                                    oneLine = fields?.oneLine ?: "",
+                                    mode = fields?.mode ?: "Note",
+                                    whenText = "Today " + SimpleDateFormat("HH:mm", Locale.US).format(Date()),
+                                    verbatim = text.trim(),
+                                    why = fields?.why ?: "",
+                                    question = fields?.question ?: "",
+                                    tags = fields?.tags ?: emptyList(),
+                                    audioPath = null,
+                                    spaceId = currentSpaceId,
+                                    format = if (chosenFormat.usesLlm && fields == null) NoteFormat.PLAIN.id else chosenFormat.id,
+                                    items = fields?.items ?: emptyList(),
+                                    createdAt = System.currentTimeMillis(),
+                                    questionDrafts = fields?.questionDrafts ?: emptyList()
+                                )
+                            )
+                            id to readSnapshot()
+                        }
+                        applySnapshot(snapshot)
+                        savingQuickJot = false
+                        showCaptureSheet = false
+                        tab = 0
+                        openNoteId = newId
+                    }
+                },
+                onOpenFullEditor = { composingNote = true },
+                onDismiss = { showCaptureSheet = false }
+            )
         }
 
         // Stacked navigation layers over mounted Scaffold
@@ -1109,7 +1191,7 @@ fun SievexApp(
                         openNoteId = null
                         openSpaceId = null
                         notesTagFilter = tag
-                        tab = 2
+                        tab = 0
                     },
                     onBack = { openNoteId = null },
                     onEdit = { editingNoteId = note.id },
@@ -1126,6 +1208,33 @@ fun SievexApp(
                     }
                 )
             }
+        }
+
+        AnimatedVisibility(
+            visible = openSettings,
+            enter = fadeIn(tween(180)),
+            exit = fadeOut(tween(140))
+        ) {
+            SettingsScreen(
+                armed = armed,
+                recording = recording,
+                notifAccess = notifAccess,
+                micGranted = micGranted,
+                postNotifsGranted = postNotifsGranted,
+                onBack = { openSettings = false },
+                onOpenNotifAccess = openNotifAccessSettings,
+                onRequestMic = {
+                    pendingAudioAction = null
+                    audioPerm.launch(Manifest.permission.RECORD_AUDIO)
+                },
+                onRequestPostNotifs = {
+                    if (Build.VERSION.SDK_INT >= 33) {
+                        notifyPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        openAppSettings()
+                    }
+                }
+            )
         }
 
         AnimatedContent(
@@ -1168,7 +1277,7 @@ fun SievexApp(
                     onCancel = { composingNote = false },
                     onSaved = { newId ->
                         composingNote = false
-                        tab = 2
+                        tab = 0
                         scope.launch {
                             applySnapshot(withContext(Dispatchers.IO) { readSnapshot() })
                             openNoteId = newId
@@ -1207,6 +1316,7 @@ fun SievexApp(
                     openSpaceId = null
                     openNoteId = null
                     tab = 0
+                    showCaptureSheet = true
                 } else {
                     pendingMediaVoiceId = item.id
                     pendingMediaVoiceSpaceId = item.spaceId
@@ -1322,7 +1432,7 @@ private fun RowScope.NavItem(
         label = {
             Text(
                 label,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = EditorialSerif),
                 maxLines = 1,
                 softWrap = false,
                 overflow = TextOverflow.Ellipsis
@@ -1339,39 +1449,11 @@ private fun RowScope.NavItem(
 }
 
 @Composable
-private fun RecordTabIcon(selected: Boolean) {
+private fun DeskTabIcon(selected: Boolean) {
     val tint = if (selected) SignalText else Ink2
     ComposeCanvas(Modifier.size(22.dp)) {
-        val w = size.width
-        val h = size.height
-        val stroke = 1.9.dp.toPx()
-        // Outer ring + inner record dot
-        drawCircle(color = tint, radius = w * 0.42f, style = Stroke(width = stroke))
-        drawCircle(color = tint, radius = w * 0.21f)
-    }
-}
-
-@Composable
-private fun SpacesTabIcon(selected: Boolean) {
-    val tint = if (selected) SignalText else Ink2
-    ComposeCanvas(Modifier.size(22.dp)) {
-        val gap = 2.dp.toPx()
-        val cell = (size.width - gap * 3f) / 2f
-        val r = CornerRadius(2.5.dp.toPx())
-        val stroke = Stroke(width = 1.8.dp.toPx())
-        drawRoundRect(color = tint, topLeft = Offset(gap / 2f, gap / 2f), size = Size(cell, cell), cornerRadius = r, style = stroke)
-        drawRoundRect(color = tint, topLeft = Offset(gap * 1.5f + cell, gap / 2f), size = Size(cell, cell), cornerRadius = r, style = stroke)
-        drawRoundRect(color = tint, topLeft = Offset(gap / 2f, gap * 1.5f + cell), size = Size(cell, cell), cornerRadius = r, style = stroke)
-        drawRoundRect(color = tint, topLeft = Offset(gap * 1.5f + cell, gap * 1.5f + cell), size = Size(cell, cell), cornerRadius = r, style = stroke)
-    }
-}
-
-@Composable
-private fun NotesTabIcon(selected: Boolean) {
-    val tint = if (selected) SignalText else Ink2
-    ComposeCanvas(Modifier.size(22.dp)) {
-        val padX = 3.5.dp.toPx()
-        val padY = 2.dp.toPx()
+        val padX = 3.dp.toPx()
+        val padY = 2.5.dp.toPx()
         val w = size.width - padX * 2f
         val h = size.height - padY * 2f
         val stroke = 1.8.dp.toPx()
@@ -1379,13 +1461,72 @@ private fun NotesTabIcon(selected: Boolean) {
             color = tint,
             topLeft = Offset(padX, padY),
             size = Size(w, h),
-            cornerRadius = CornerRadius(3.dp.toPx()),
+            cornerRadius = CornerRadius(2.5.dp.toPx()),
             style = Stroke(width = stroke)
         )
         val lineLeft = padX + 3.dp.toPx()
         val lineRight = padX + w - 3.dp.toPx()
-        drawLine(tint, Offset(lineLeft, padY + h * 0.34f), Offset(lineRight, padY + h * 0.34f), strokeWidth = stroke)
-        drawLine(tint, Offset(lineLeft, padY + h * 0.56f), Offset(lineRight, padY + h * 0.56f), strokeWidth = stroke)
-        drawLine(tint, Offset(lineLeft, padY + h * 0.78f), Offset(lineLeft + w * 0.45f, padY + h * 0.78f), strokeWidth = stroke)
+        drawLine(tint, Offset(lineLeft, padY + h * 0.32f), Offset(lineRight, padY + h * 0.32f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(tint, Offset(lineLeft, padY + h * 0.56f), Offset(lineRight, padY + h * 0.56f), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(tint, Offset(lineLeft, padY + h * 0.78f), Offset(lineLeft + w * 0.45f, padY + h * 0.78f), strokeWidth = stroke, cap = StrokeCap.Round)
+    }
+}
+
+@Composable
+private fun SpacesTabIcon(selected: Boolean) {
+    val tint = if (selected) SignalText else Ink2
+    ComposeCanvas(Modifier.size(22.dp)) {
+        val padY = 3.dp.toPx()
+        val h = size.height - padY * 2f
+        val stroke = 1.8.dp.toPx()
+        val bookW = 4.2.dp.toPx()
+        val gap = 2.2.dp.toPx()
+        val startX = (size.width - (bookW * 3f + gap * 2f)) / 2f
+        val r = CornerRadius(1.2.dp.toPx())
+        for (i in 0 until 3) {
+            val x = startX + i * (bookW + gap)
+            val top = if (i == 1) padY + 2.dp.toPx() else padY
+            drawRoundRect(
+                color = tint,
+                topLeft = Offset(x, top),
+                size = Size(bookW, size.height - padY - top),
+                cornerRadius = r,
+                style = Stroke(width = stroke)
+            )
+        }
+    }
+}
+
+@Composable
+private fun TriageTabIcon(selected: Boolean) {
+    val tint = if (selected) SignalText else Ink2
+    ComposeCanvas(Modifier.size(22.dp)) {
+        val padX = 2.5.dp.toPx()
+        val padY = 4.dp.toPx()
+        val w = size.width - padX * 2f
+        val h = size.height - padY * 2f
+        val stroke = 1.8.dp.toPx()
+        // Index card deck: back tab + front card
+        drawLine(
+            color = tint,
+            start = Offset(padX + 2.dp.toPx(), padY - 1.5.dp.toPx()),
+            end = Offset(padX + w * 0.55f, padY - 1.5.dp.toPx()),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+        drawRoundRect(
+            color = tint,
+            topLeft = Offset(padX, padY + 1.dp.toPx()),
+            size = Size(w, h - 1.dp.toPx()),
+            cornerRadius = CornerRadius(2.5.dp.toPx()),
+            style = Stroke(width = stroke)
+        )
+        drawLine(
+            color = tint,
+            start = Offset(padX + 3.dp.toPx(), padY + h * 0.52f),
+            end = Offset(padX + w - 3.dp.toPx(), padY + h * 0.52f),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
     }
 }
