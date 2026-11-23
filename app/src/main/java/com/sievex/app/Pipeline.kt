@@ -1,5 +1,7 @@
 package com.sievex.app
 
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -31,6 +33,9 @@ object Pipeline {
     var lastTitle by mutableStateOf("")
         private set
 
+    var lastNoteId by mutableStateOf<Long?>(null)
+        private set
+
     /** One action inside [PipelineStage.TRANSFORMING]; null when not transforming. */
     var step by mutableStateOf<PipelineStep?>(null)
         private set
@@ -44,21 +49,36 @@ object Pipeline {
         private set
 
     /** The format being shaped, so phase numbers map to the right step. */
+    @Volatile
     private var stepFormat = NoteFormat.NOTE
 
+    private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
+
+    private fun onMain(block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            block()
+        } else {
+            mainHandler.post(block)
+        }
+    }
+
     fun transcribing() {
-        stage = PipelineStage.TRANSCRIBING
-        detail = ""
-        step = null
-        blocked = false
+        onMain {
+            stage = PipelineStage.TRANSCRIBING
+            detail = ""
+            step = null
+            blocked = false
+        }
     }
 
     fun transforming(format: NoteFormat = NoteFormat.NOTE) {
-        stage = PipelineStage.TRANSFORMING
-        detail = ""
         stepFormat = format
-        step = stepFor(format, 1)
-        blocked = false
+        onMain {
+            stage = PipelineStage.TRANSFORMING
+            detail = ""
+            step = stepFor(format, 1)
+            blocked = false
+        }
     }
 
     /**
@@ -66,23 +86,31 @@ object Pipeline {
      * native change can never blank the step.
      */
     fun transformingStep(phase: Int) {
-        stage = PipelineStage.TRANSFORMING
-        stepFor(stepFormat, phase)?.let { step = it }
+        val next = stepFor(stepFormat, phase)
+        onMain {
+            stage = PipelineStage.TRANSFORMING
+            next?.let { step = it }
+        }
     }
 
-    fun done(title: String) {
-        stage = PipelineStage.DONE
-        lastTitle = title
-        detail = ""
-        step = null
-        blocked = false
+    fun done(title: String, noteId: Long? = null) {
+        onMain {
+            stage = PipelineStage.DONE
+            lastTitle = title
+            lastNoteId = noteId
+            detail = ""
+            step = null
+            blocked = false
+        }
     }
 
     fun failed(reason: String) {
-        stage = PipelineStage.FAILED
-        detail = reason
-        step = null
-        blocked = false
+        onMain {
+            stage = PipelineStage.FAILED
+            detail = reason
+            step = null
+            blocked = false
+        }
     }
 
     /**
@@ -91,18 +119,23 @@ object Pipeline {
      * The reason is already localised by the caller, which has a Context.
      */
     fun block(reason: String) {
-        stage = PipelineStage.FAILED
-        detail = reason
-        step = null
-        blocked = true
+        onMain {
+            stage = PipelineStage.FAILED
+            detail = reason
+            step = null
+            blocked = true
+        }
     }
 
     fun reset() {
-        stage = PipelineStage.IDLE
-        detail = ""
-        lastTitle = ""
-        step = null
-        blocked = false
+        onMain {
+            stage = PipelineStage.IDLE
+            detail = ""
+            lastTitle = ""
+            lastNoteId = null
+            step = null
+            blocked = false
+        }
     }
 
     /**

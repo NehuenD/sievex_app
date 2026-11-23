@@ -23,8 +23,14 @@ object TransformModel {
     private const val NAME = "LFM3-1.7B-Q4_K_M.gguf"
     private const val SOURCE =
         "https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-Q4_K_M.gguf"
-    private const val BYTES = 1_099_627_808L
+    const val BYTES = 1_099_627_808L
+    val totalMb: Long = BYTES / (1024 * 1024)
     private const val SHA256 = "3793e1e6e2266919d6e015287221b41100175a98eddaba92e111aed3b05c93c4"
+
+    @Volatile
+    private var cancelRequested = false
+
+    private class CancelledDownloadException : IOException("Download cancelled")
 
     var installed by mutableStateOf(false)
         private set
@@ -45,9 +51,13 @@ object TransformModel {
 
     fun modelFile(filesDir: File): File = File(File(filesDir, "models/llm"), NAME)
 
+    fun isInstalled(filesDir: File): Boolean {
+        val f = modelFile(filesDir)
+        return f.isFile && f.length() == BYTES
+    }
+
     fun refresh(context: Context) {
-        val f = modelFile(context.filesDir)
-        installed = f.length() == BYTES
+        installed = isInstalled(context.filesDir)
         if (installed) {
             status = context.getString(R.string.sys_llm_status_ready, BYTES / (1024 * 1024))
             progress = 1f
@@ -56,10 +66,29 @@ object TransformModel {
         }
     }
 
+    fun cancel() {
+        if (busy) cancelRequested = true
+    }
+
+    /** Removes installed LLM weights cleanly. Must be called from a background IO thread. */
+    fun deleteInstalled(context: Context) {
+        if (busy) return
+        val app = context.applicationContext
+        LlmGate.exclusive { LlamaBridge.nativeUnload() }
+        val target = modelFile(app.filesDir)
+        target.delete()
+        File(target.parentFile, "$NAME.part").delete()
+        failed = false
+        progress = 0f
+        refresh(app)
+        CaptureLog.add("llm: deleted model")
+    }
+
     fun download(context: Context) {
         if (busy) return
         busy = true
         failed = false
+        cancelRequested = false
         progress = 0f
         status = context.getString(R.string.sys_model_starting_download)
 
@@ -70,9 +99,15 @@ object TransformModel {
             val part = File(target.parentFile, "$NAME.part")
 
             try {
-                fetch(part)
+                if (part.length() > BYTES) {
+                    part.delete()
+                }
+                if (part.length() < BYTES) {
+                    fetch(part)
+                }
 
                 if (part.length() != BYTES) {
+                    if (part.length() > BYTES) part.delete()
                     throw IOException("size ${part.length()} != $BYTES")
                 }
                 status = app.getString(R.string.sys_model_verifying)
@@ -81,6 +116,7 @@ object TransformModel {
                     throw IOException("checksum mismatch")
                 }
 
+                LlmGate.exclusive { LlamaBridge.nativeUnload() }
                 if (target.exists()) target.delete()
                 if (!part.renameTo(target)) {
                     part.copyTo(target, overwrite = true)
@@ -93,6 +129,10 @@ object TransformModel {
                 CaptureLog.add("llm: model installed")
                 // A burst held by the pipeline can finish now; the queue drains on its own.
                 CaptureService.kick(app)
+            } catch (_: CancelledDownloadException) {
+                failed = false
+                status = app.getString(R.string.sys_llm_status_not_installed)
+                CaptureLog.add("llm: download cancelled")
             } catch (t: Throwable) {
                 failed = true
                 status = app.getString(R.string.sys_model_download_failed, t.message)
@@ -103,7 +143,7 @@ object TransformModel {
         }.start()
     }
 
-    private fun fetch(part: File) {
+    private fun fetch(part: File, allowReset: Boolean = true) {
         val conn = URL(SOURCE).openConnection() as HttpURLConnection
         conn.instanceFollowRedirects = true
         conn.connectTimeout = 20_000
@@ -113,34 +153,44 @@ object TransformModel {
         var have = if (part.exists()) part.length() else 0L
         if (have > 0) conn.setRequestProperty("Range", "bytes=$have-")
 
+        var retryFromZero = false
         try {
             val code = conn.responseCode
-            if (code != HttpURLConnection.HTTP_OK && code != HttpURLConnection.HTTP_PARTIAL) {
-                throw IOException("HTTP $code")
-            }
-
-            val raf = RandomAccessFile(part, "rw")
-            if (code == HttpURLConnection.HTTP_OK) {
-                have = 0L
-                raf.setLength(0)
+            if (code == 416 && allowReset) {
+                part.delete()
+                retryFromZero = true
             } else {
-                raf.seek(have)
-            }
+                if (code != HttpURLConnection.HTTP_OK && code != HttpURLConnection.HTTP_PARTIAL) {
+                    throw IOException("HTTP $code")
+                }
 
-            var written = have
-            conn.inputStream.use { input ->
-                val buffer = ByteArray(512 * 1024)
-                while (true) {
-                    val n = input.read(buffer)
-                    if (n <= 0) break
-                    raf.write(buffer, 0, n)
-                    written += n
-                    progress = (written.toFloat() / BYTES).coerceIn(0f, 1f)
+                RandomAccessFile(part, "rw").use { raf ->
+                    if (code == HttpURLConnection.HTTP_OK) {
+                        have = 0L
+                        raf.setLength(0)
+                    } else {
+                        raf.seek(have)
+                    }
+
+                    var written = have
+                    conn.inputStream.use { input ->
+                        val buffer = ByteArray(512 * 1024)
+                        while (true) {
+                            if (cancelRequested) throw CancelledDownloadException()
+                            val n = input.read(buffer)
+                            if (n <= 0) break
+                            raf.write(buffer, 0, n)
+                            written += n
+                            progress = (written.toFloat() / BYTES).coerceIn(0f, 1f)
+                        }
+                    }
                 }
             }
-            raf.close()
         } finally {
             conn.disconnect()
+        }
+        if (retryFromZero) {
+            fetch(part, allowReset = false)
         }
     }
 

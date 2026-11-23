@@ -14,7 +14,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,20 +25,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -47,23 +48,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sievex.app.R
+import kotlinx.coroutines.launch
 
 /** One page of the first-run flow: what it says, and what the primary button offers. */
 private data class OnboardingStep(
     @StringRes val heading: Int,
     @StringRes val body: Int,
-    @StringRes val action: Int
+    @StringRes val action: Int,
+    @StringRes val footnote: Int? = null
 )
 
-/**
- * Step 3 is the record screen's introduction, so its button is the record screen's button.
- * The wording is fixed: the three cards are the whole product pitch. The pages hold resource
- * ids rather than text, so the copy is resolved in composition in the chosen language.
- */
 private val onboardingSteps = listOf(
     OnboardingStep(
         heading = R.string.sys_onboarding_step1_title,
@@ -78,32 +78,24 @@ private val onboardingSteps = listOf(
     OnboardingStep(
         heading = R.string.sys_onboarding_step3_title,
         body = R.string.sys_onboarding_step3_body,
-        action = R.string.sys_onboarding_action_get_started
+        action = R.string.sys_onboarding_action_get_started,
+        footnote = R.string.sys_onboarding_permissions_hint
     )
 )
 
 /**
- * The first-run flow: three quiet pages, shown once.
- *
- * It is deliberately outside the app's Scaffold, so it owns the background and the system-bar
- * insets itself. The mark never changes between pages — only the words and the action do — which
- * keeps the flow reading as one screen the user is moving through, not three separate screens.
- *
- * The copy block scrolls (small phones, large font scale) while the indicator and the actions stay
- * pinned to the bottom, where the thumb already is.
+ * First-run flow: three swipeable pages with fixed header chrome and contextual permission priming.
  */
 @Composable
 fun OnboardingScreen(onDone: () -> Unit) {
-    var step by rememberSaveable { mutableIntStateOf(0) }
-    /**
-     * The parent swaps this screen out on [onDone], but a double tap on the last button would
-     * otherwise reach it twice. One call, ever.
-     */
+    val pagerState = rememberPagerState(pageCount = { onboardingSteps.size })
+    val scope = rememberCoroutineScope()
+    val step = pagerState.currentPage
     var finished by rememberSaveable { mutableStateOf(false) }
 
-    // The in-content Back button is not enough: the system gesture has to move between pages too,
-    // instead of leaving the app from page 2.
-    BackHandler(enabled = step > 0) { step -= 1 }
+    BackHandler(enabled = step > 0) {
+        scope.launch { pagerState.animateScrollToPage(step - 1) }
+    }
 
     val finish: () -> Unit = {
         if (!finished) {
@@ -118,10 +110,12 @@ fun OnboardingScreen(onDone: () -> Unit) {
             .background(Canvas)
             .systemBarsPadding()
     ) {
+        // Fixed 56dp height keeps vertical layout completely steady on Step 3 when Skip hides.
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(start = 24.dp, end = 20.dp, top = 8.dp),
+                .height(56.dp)
+                .padding(start = 24.dp, end = 20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -136,57 +130,68 @@ fun OnboardingScreen(onDone: () -> Unit) {
                 color = Ink2
             )
             Spacer(Modifier.weight(1f))
-            // Absent on the last page: by then the button is the only thing left to do.
             if (step < onboardingSteps.lastIndex) {
                 SkipButton(onClick = finish)
             }
         }
 
-        // Centred when the copy fits, scrolled when it does not: the min height is the viewport.
-        BoxWithConstraints(
-            Modifier
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-        ) {
-            val viewport = maxHeight
+        ) { index ->
+            val page = onboardingSteps[index]
             Column(
                 Modifier
-                    .fillMaxWidth()
+                    .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .heightIn(min = viewport)
                     .padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                OnboardingMark()
+                OnboardingMark(step = index)
                 Spacer(Modifier.height(30.dp))
-                AnimatedContent(
-                    targetState = step,
-                    transitionSpec = {
-                        fadeIn(tween(220)) togetherWith fadeOut(tween(140))
-                    },
-                    label = "onboarding step"
-                ) { index ->
-                    val page = onboardingSteps[index]
-                    Column(Modifier.fillMaxWidth()) {
-                        Text(
-                            stringResource(page.heading),
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = Ink
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            stringResource(page.body),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Ink2
-                        )
+                Column(Modifier.fillMaxWidth()) {
+                    Text(
+                        stringResource(page.heading),
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = Ink
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        stringResource(page.body),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Ink2
+                    )
+                    if (page.footnote != null) {
+                        Spacer(Modifier.height(16.dp))
+                        Surface(
+                            color = Surface1,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, Line, RoundedCornerShape(16.dp))
+                        ) {
+                            Text(
+                                stringResource(page.footnote),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Ink2,
+                                modifier = Modifier.padding(14.dp)
+                            )
+                        }
                     }
                 }
             }
         }
 
-        StepIndicator(step)
-        Spacer(Modifier.height(20.dp))
+        StepIndicator(
+            index = step,
+            onSelect = { target ->
+                scope.launch { pagerState.animateScrollToPage(target) }
+            }
+        )
+        Spacer(Modifier.height(14.dp))
 
         Row(
             Modifier
@@ -195,29 +200,44 @@ fun OnboardingScreen(onDone: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (step > 0) {
-                BackButton { step -= 1 }
+                BackButton {
+                    scope.launch { pagerState.animateScrollToPage(step - 1) }
+                }
                 Spacer(Modifier.width(14.dp))
             }
             PrimaryAction(
                 label = stringResource(onboardingSteps[step].action),
                 modifier = Modifier.weight(1f),
-                onClick = { if (step < onboardingSteps.lastIndex) step += 1 else finish() }
+                onClick = {
+                    if (step < onboardingSteps.lastIndex) {
+                        scope.launch { pagerState.animateScrollToPage(step + 1) }
+                    } else {
+                        finish()
+                    }
+                }
             )
         }
     }
 }
 
-/**
- * The one drawing in the flow: waves around a handheld mic, built from shapes so it needs no
- * asset and stays crisped at any density. Hairlines only — the app has no shadows or gradients.
- */
+/** Step-distinct geometric emblem rendered cleanly with shapes at any density. */
 @Composable
-private fun OnboardingMark() {
+private fun OnboardingMark(step: Int) {
+    val accent = when (step) {
+        1 -> Blue
+        2 -> Mint
+        else -> Signal
+    }
+    val softFill = when (step) {
+        1 -> Color(0xFF172638)
+        2 -> Color(0xFF152D29)
+        else -> SignalSoft
+    }
+
     Box(
         Modifier.size(196.dp),
         contentAlignment = Alignment.Center
     ) {
-        // The outer hairline stands for the burst: the same idea as the record button's rings.
         Box(
             Modifier
                 .size(196.dp)
@@ -235,44 +255,92 @@ private fun OnboardingMark() {
                 Modifier
                     .size(88.dp)
                     .clip(CircleShape)
-                    .background(SignalSoft)
-                    .border(1.dp, Signal.copy(alpha = 0.45f), CircleShape),
+                    .background(softFill)
+                    .border(1.dp, accent.copy(alpha = 0.45f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                // Mic: capsule, stem, base. Reads at 88dp without any icon dependency.
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
-                        Modifier
-                            .width(18.dp)
-                            .height(34.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(Signal)
-                    )
-                    Spacer(Modifier.height(3.dp))
-                    Box(
-                        Modifier
-                            .width(2.dp)
-                            .height(8.dp)
-                            .background(Signal.copy(alpha = 0.7f))
-                    )
-                    Spacer(Modifier.height(3.dp))
-                    Box(
-                        Modifier
-                            .width(13.dp)
-                            .height(2.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(Signal.copy(alpha = 0.85f))
-                    )
+                AnimatedContent(
+                    targetState = step,
+                    transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) },
+                    label = "onboarding mark"
+                ) { page ->
+                    when (page) {
+                        0 -> {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(
+                                    Modifier
+                                        .width(18.dp)
+                                        .height(34.dp)
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .background(Signal)
+                                )
+                                Spacer(Modifier.height(3.dp))
+                                Box(
+                                    Modifier
+                                        .width(2.dp)
+                                        .height(8.dp)
+                                        .background(Signal.copy(alpha = 0.7f))
+                                )
+                                Spacer(Modifier.height(3.dp))
+                                Box(
+                                    Modifier
+                                        .width(13.dp)
+                                        .height(2.dp)
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .background(Signal.copy(alpha = 0.85f))
+                                )
+                            }
+                        }
+                        1 -> {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(
+                                    Modifier
+                                        .width(20.dp)
+                                        .height(16.dp)
+                                        .border(2.5.dp, Blue, RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
+                                )
+                                Box(
+                                    Modifier
+                                        .width(30.dp)
+                                        .height(22.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Blue),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Box(
+                                        Modifier
+                                            .size(6.dp)
+                                            .clip(CircleShape)
+                                            .background(Canvas)
+                                    )
+                                }
+                            }
+                        }
+                        else -> {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Box(Modifier.size(16.dp).clip(RoundedCornerShape(5.dp)).background(Mint))
+                                    Box(Modifier.size(16.dp).clip(CircleShape).background(Mint.copy(alpha = 0.45f)))
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Box(Modifier.size(16.dp).clip(CircleShape).background(Mint.copy(alpha = 0.45f)))
+                                    Box(Modifier.size(16.dp).clip(RoundedCornerShape(5.dp)).background(Mint))
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-/** Three capsules: the current one is Signal and wider, the rest are Line hairlines. */
+/** Three interactive capsules with a full 48dp hit height. */
 @Composable
-private fun StepIndicator(index: Int) {
-    // Resolved here, not inside the semantics block: that lambda is not composable.
+private fun StepIndicator(index: Int, onSelect: (Int) -> Unit) {
     val stepDescription =
         stringResource(R.string.sys_onboarding_step_indicator, index + 1, onboardingSteps.size)
     Row(
@@ -287,89 +355,100 @@ private fun StepIndicator(index: Int) {
         onboardingSteps.indices.forEach { i ->
             val current = i == index
             val capsuleWidth by animateDpAsState(
-                targetValue = if (current) 20.dp else 8.dp,
+                targetValue = if (current) 22.dp else 8.dp,
                 animationSpec = tween(200),
                 label = "step capsule"
             )
             Box(
                 Modifier
-                    .padding(horizontal = 4.dp)
-                    .size(width = capsuleWidth, height = 8.dp)
-                    .clip(CircleShape)
-                    .background(if (current) Signal else Line)
+                    .height(48.dp)
+                    .clickable(role = Role.Tab) { onSelect(i) }
+                    .padding(horizontal = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    Modifier
+                        .size(width = capsuleWidth, height = 8.dp)
+                        .clip(CircleShape)
+                        .background(if (current) Signal else Line)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SkipButton(onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        color = Color.Transparent,
+        shape = RoundedCornerShape(999.dp),
+        modifier = Modifier.heightIn(min = 48.dp)
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.padding(horizontal = 14.dp)
+        ) {
+            Text(
+                stringResource(R.string.sys_onboarding_skip),
+                style = MaterialTheme.typography.labelMedium,
+                color = Ink2
             )
         }
     }
 }
 
-/** Quiet top-right escape hatch. Text only, so it never competes with the primary action. */
-@Composable
-private fun SkipButton(onClick: () -> Unit) {
-    Box(
-        Modifier
-            .heightIn(min = 48.dp)
-            .clip(RoundedCornerShape(999.dp))
-            .clickable { onClick() }
-            .padding(horizontal = 12.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            stringResource(R.string.sys_onboarding_skip),
-            style = MaterialTheme.typography.labelMedium,
-            color = Ink2
-        )
-    }
-}
-
-/** 54dp circle, hairline border, ArrowBack. Named for TalkBack. */
 @Composable
 private fun BackButton(onClick: () -> Unit) {
-    Box(
-        Modifier
+    Surface(
+        onClick = onClick,
+        color = Surface2,
+        shape = CircleShape,
+        modifier = Modifier
             .size(54.dp)
-            .clip(CircleShape)
-            .background(Surface2)
             .border(1.dp, Line.copy(alpha = 0.6f), CircleShape)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
     ) {
-        Icon(
-            Icons.Filled.ArrowBack,
-            contentDescription = stringResource(R.string.sys_onboarding_back_content_description),
-            tint = Ink,
-            modifier = Modifier.size(20.dp)
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = stringResource(R.string.sys_onboarding_back_content_description),
+                tint = Ink,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }
 
-/** The pill primary action, same shape language as the rest of the app. White on Signal. */
 @Composable
 private fun PrimaryAction(
     label: String,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    Box(
-        modifier
-            .heightIn(min = 54.dp)
-            .clip(RoundedCornerShape(999.dp))
-            .background(Signal)
-            .clickable { onClick() }
-            .padding(horizontal = 24.dp),
-        contentAlignment = Alignment.Center
+    Surface(
+        onClick = onClick,
+        color = SignalFill,
+        shape = RoundedCornerShape(999.dp),
+        modifier = modifier.heightIn(min = 54.dp)
     ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.titleMedium,
-            color = Color.White,
-            maxLines = 1
-        )
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.padding(horizontal = 24.dp)
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
 /**
- * Where the "seen it" flag lives. One boolean, one file, written synchronously so a process death
- * straight after the last tap cannot show the flow a second time.
+ * Persists first-run completion immediately in-memory via `.apply()` and flushes asynchronously
+ * so closing the intro never blocks the UI thread.
  */
 object OnboardingPrefs {
     private const val FILE = "sievex_onboarding"
@@ -382,6 +461,6 @@ object OnboardingPrefs {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY, true)
-            .commit()
+            .apply()
     }
 }

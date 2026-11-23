@@ -23,6 +23,20 @@
     <string name="ui_action_on">Activado</string>
     <string name="ui_action_off">Desactivado</string>
     <string name="ui_action_stop">Detener</string>
+    <string name="ui_action_close">Cerrar</string>
+    <string name="ui_action_dismiss">Ocultar</string>
+    <string name="ui_action_retry">Reintentar</string>
+    <string name="ui_action_delete">Eliminar</string>
+    <string name="ui_action_clear">Limpiar</string>
+    <string name="ui_action_more">Más opciones</string>
+    <string name="ui_action_undo">Deshacer</string>
+    <string name="ui_discard_title">¿Descartar cambios sin guardar?</string>
+    <string name="ui_discard_body">Tus cambios aún no se han guardado.</string>
+    <string name="ui_discard_confirm">Descartar</string>
+    <string name="ui_keep_editing">Seguir editando</string>
+    <string name="ui_mic_permission_denied">Se necesita permiso de micrófono para grabar.</string>
+    <string name="ui_open_settings">Ajustes</string>
+    <string name="ui_copied_toast">Copiado al portapapeles</string>
 
     <!-- Spaces: name, pick, delete, edit -->
     <string name="ui_space_new">Nuevo espacio</string>
@@ -175,6 +189,7 @@
     <string name="ui_lens_none_body">Una lente es una forma de leer todas las notas de este espacio: elige los encabezados, lee las notas y se puede regenerar cuando quieras.</string>
     <string name="ui_lens_empty_title">AÚN SIN %1$s</string>
     <string name="ui_lens_empty_body">Lee todas las notas de este espacio y cita las que usó. No se escribe nada hasta que lo generes.</string>
+    <string name="ui_lens_from_notes_one">de 1 nota · %1$s</string>
     <string name="ui_lens_from_notes">de %1$d notas · %2$s</string>
     <string name="ui_lens_show_action">Mostrar %1$s</string>
     <string name="ui_lens_remove_action">Quitar %1$s de este espacio</string>
@@ -195,6 +210,7 @@
     <string name="ui_placeholder_lens_sections">Qué puede salir mal, Señales tempranas, Mitigaciones</string>
 
     <!-- Actions screen -->
+    <string name="ui_actions_pending_one">1 pendiente</string>
     <string name="ui_actions_pending">%1$d pendientes</string>
     <string name="ui_actions_empty">Nada pendiente. Las capturas en modo Acción llegan aquí.</string>
 
@@ -242,4 +258,161 @@
     <string name="ui_share_mic_needed">Se necesita permiso de micrófono para grabar — imagen guardada.</string>
     <string name="ui_media_ocr_label">Texto extraído</string>
     <string name="ui_media_ocr_copy">Copiar texto</string>
+    <string name="ui_media_missing">Imagen no disponible</string>
+    <string name="ui_media_ocr_scanning">Escaneando texto…</string>
+    <string name="ui_media_ocr_none">Sin texto detectado</string>
+    <string name="ui_media_save_failed">No se pudieron guardar los cambios.</string>
+    <string name="ui_media_share_failed">No se pudo compartir la imagen.</string>
+    <string name="ui_media_zoom_reset">Restablecer %1$s</string>
+    <string name="ui_share_new_space_chip">+ Nuevo espacio</string>
+    <string name="ui_share_save_error">No se pudieron guardar las imágenes. Inténtalo de nuevo.</string>
+    <string name="ui_share_partial_failed">Se guardaron %1$d de %2$d imágenes.</string>
+
+    <!-- Added UX remediation strings -->
+    <string name="ui_record_processing">Procesando ráfaga…</string>
+    <string name="ui_record_cancel">Descartar</string>
+    <string name="ui_record_use_plain">Seguir en modo Texto</string>
+    <string name="ui_record_wifi_hint">Se recomienda Wi-Fi.</string>
+    <string name="ui_record_notif_hint">Permite acceso a notificaciones para capturar al pausar un pódcast.</string>
+    <string name="ui_notes_search_placeholder">Buscar notas, capturas (OCR), informes…</string>
+    <string name="ui_notes_filter_all">Todas</string>
+    <string name="ui_notes_filter_empty">Ninguna nota coincide con este filtro.</string>
+    <string name="ui_note_delete_title">¿Eliminar nota?</string>
+    <string name="ui_note_delete_body">Esto elimina permanentemente la nota y su grabación.</string>
+    <string name="ui_note_delete_confirm">Eliminar nota</string>
+    <string name="ui_note_share">Compartir nota</string>
+    <string name="ui_note_audio_label">GRABACIÓN</string>
+    <string name="ui_note_audio_play">Reproducir</string>
+    <string name="ui_note_audio_stop">Detener</string>
+    <string name="ui_reprocess_edited_warning">Editaste esta nota a mano. Reprocesar sustituirá el título, resumen, hallazgo y etiquetas que editaste.</string>
+    <string name="ui_reprocess_missing_model">Instala el modelo de lenguaje en Ajustes para usar este formato.</string>
+    <string name="ui_editor_more_details">Detalles y hallazgos</string>
+    <string name="ui_editor_needs_content">Añade un título, texto o elemento antes de guardar.</string>
+    <string name="ui_new_note_ai_failed_toast">IA no disponible — guardada como Texto.</string>
+    <string name="ui_actions_mark_done">Marcar acción completada</string>
+    <string name="ui_actions_completed_header">Completadas (%1$d)</string>
+    <string name="ui_actions_completed_toast">Acción completada</string>
+    <string name="ui_actions_reopened_toast">Acción reabierta</string>
+    <string name="ui_settings_permissions">PERMISOS</string>
+    <string name="ui_settings_notif_access">Detección de pausa de pódcast</string>
+    <string name="ui_settings_mic_access">Micrófono</string>
+    <string name="ui_settings_post_notifs">Notificaciones</string>
+    <string name="ui_settings_granted">Concedido</string>
+    <string name="ui_settings_needed">Activar</string>
+    <string name="ui_settings_download_llm">Descargar modelo de lenguaje (1.1 GB)</string>
+    <string name="ui_settings_model_delete_title">¿Eliminar %1$s?</string>
+    <string name="ui_settings_model_delete_body">Libera %1$d MB de espacio. Podrás volver a descargarlo después.</string>
+    <string name="ui_settings_diagnostics">Diagnóstico</string>
+    <string name="ui_space_duplicate_warning">Ya existe un espacio con este nombre.</string>
+    <string name="ui_space_importing_media">Importando imágenes…</string>
+    <string name="ui_space_import_partial_failed">No se pudieron importar algunas imágenes.</string>
+    <string name="ui_lens_custom_edit_title">Editar lente personalizada</string>
+    <string name="ui_lens_edit">Editar lente</string>
+    <string name="ui_lens_custom_required_hint">El nombre y la instrucción son obligatorios.</string>
+    <string name="ui_lens_delete_confirm_title">¿Eliminar \"%1$s\" para siempre?</string>
+    <string name="ui_lens_delete_confirm_body">Esto quita la lente personalizada de todos los espacios y borra todos sus informes guardados.</string>
+
+    <!-- Pantalla de grabación ambient-canvas -->
+    <string name="ui_record_filing_into">ARCHIVAR EN</string>
+    <string name="ui_record_space_inbox">Bandeja</string>
+    <string name="ui_record_space_selector_desc">Archivando en %1$s. Toca para cambiar de espacio.</string>
+    <string name="ui_record_tap_to_speak">Toca para hablar</string>
+    <string name="ui_record_podcast_short">Pódcast</string>
+    <string name="ui_record_podcast_armed_short">Activo</string>
+    <string name="ui_record_notif_short">Permite notificaciones para detectar pausas</string>
+
+    <!-- Búsqueda unificada (Notas + OCR + Informes de Lentes) -->
+    <string name="ui_search_scope_all">Todo (%1$d)</string>
+    <string name="ui_search_scope_notes">Notas (%1$d)</string>
+    <string name="ui_search_scope_media">Capturas (%1$d)</string>
+    <string name="ui_search_scope_reports">Informes (%1$d)</string>
+    <string name="ui_search_section_media">Capturas y OCR</string>
+    <string name="ui_search_section_reports">Informes de lentes</string>
+    <string name="ui_search_screenshot_badge">Captura</string>
+
+    <!-- Recordar y preguntas abiertas -->
+    <string name="ui_resurface_header">Recordar y explorar</string>
+    <string name="ui_resurface_next">Otro</string>
+    <string name="ui_resurface_question_kicker">Pregunta abierta</string>
+    <string name="ui_resurface_memory_kicker">De tus notas</string>
+    <string name="ui_resurface_screenshot_kicker">Captura guardada</string>
+    <string name="ui_question_resolve">Resolver</string>
+    <string name="ui_actions_tab_questions">Preguntas</string>
+    <string name="ui_actions_tab_reminders">Recordatorios</string>
+    <string name="ui_questions_count_one">1 pregunta abierta por explorar</string>
+    <string name="ui_questions_count_many">%1$d preguntas abiertas por explorar</string>
+    <string name="ui_questions_empty">No hay preguntas abiertas pendientes.</string>
+
+    <!-- Hilo de seguimientos por voz -->
+    <string name="ui_followup_section_title">Seguimientos</string>
+    <string name="ui_followup_count_one">+1 seguimiento</string>
+    <string name="ui_followup_count_many">+%1$d seguimientos</string>
+    <string name="ui_followup_add_voice">Añadir nota de voz</string>
+    <string name="ui_followup_add_hint">Agregar al hilo</string>
+    <string name="ui_followup_recording">Grabando seguimiento</string>
+    <string name="ui_followup_stop_save">Parar y añadir</string>
+
+    <!-- Captura a nota y nota de voz desde imagen -->
+    <string name="ui_media_shape_note">Convertir en nota</string>
+    <string name="ui_media_voice_note">Nota de voz</string>
+    <string name="ui_media_shaping_note">Estructurando el OCR en una nota…</string>
+    <string name="ui_media_shaped_toast">Nota creada desde la captura</string>
+    <string name="ui_media_shape_dialog_title">Convertir captura en nota</string>
+    <string name="ui_media_shape_dialog_body">Transforma el texto OCR y el comentario en una nota estructurada vinculada a esta captura.</string>
+    <string name="ui_media_shape_dialog_plain_body">Guarda el texto OCR y el comentario como nota simple vinculada a esta captura.</string>
+    <string name="ui_media_shape_confirm">Crear nota</string>
+
+    <!-- Compartir recortes de texto y OCR automático -->
+    <string name="ui_share_also_shape_ocr">También convertir el OCR en una nota</string>
+    <string name="ui_share_shaping_background">Guardado · creando nota OCR en segundo plano</string>
+    <string name="ui_share_text_title">Guardar recorte en Sievex</string>
+    <string name="ui_share_text_subtitle">Cita, enlace o fragmento</string>
+    <string name="ui_share_text_clip_label">Texto compartido</string>
+    <string name="ui_share_text_clip_hint">Texto o enlace</string>
+    <string name="ui_share_text_reaction_label">Tu apunte (opcional)</string>
+    <string name="ui_share_text_reaction_hint">¿Por qué te importa esto?</string>
+    <string name="ui_share_text_saved">Recorte guardado en Notas</string>
+    <string name="ui_space_add_clip">Añadir recorte</string>
+    <string name="ui_clip_paste_clipboard">Pegar</string>
+    <string name="ui_clip_clipboard_empty">El portapapeles está vacío</string>
+
+    <!-- Recordatorios locales -->
+    <string name="ui_reminder_dialog_title">Programar recordatorio local</string>
+    <string name="ui_reminder_tomorrow">Mañana</string>
+    <string name="ui_reminder_preset_2h">En 2 horas</string>
+    <string name="ui_reminder_preset_tonight">Esta noche (20:00)</string>
+    <string name="ui_reminder_preset_tomorrow">Mañana temprano (09:00)</string>
+    <string name="ui_reminder_preset_week">Próxima semana (09:00)</string>
+    <string name="ui_reminder_scheduled_for">Recordatorio: %1$s</string>
+    <string name="ui_reminder_chip_set">Recordarme</string>
+    <string name="ui_reminder_chip_active">Aviso · %1$s</string>
+    <string name="ui_reminder_action_set">Fijar</string>
+    <string name="ui_reminder_short">Avisar</string>
+    <string name="ui_reminder_clear">Quitar</string>
+    <string name="ui_reminder_saved_toast">Recordatorio programado</string>
+    <string name="ui_reminder_cleared_toast">Recordatorio eliminado</string>
+    <string name="ui_reminders_count_one">1 recordatorio programado</string>
+    <string name="ui_reminders_count_many">%1$d recordatorios programados</string>
+    <string name="ui_reminders_empty">No hay recordatorios activos. Toca Avisar en cualquier Acción, Nota o Captura.</string>
+
+    <!-- Enfoque IA del espacio, acciones limpias y borradores de preguntas -->
+    <string name="ui_section_focus_prompt">ENFOQUE DE IA</string>
+    <string name="ui_placeholder_space_focus">Opcional: orienta hallazgos y preguntas (p. ej., enlaces matemáticos, cruces entre notas)</string>
+    <string name="ui_space_focus_hint">Guía los hallazgos del espacio y los borradores de preguntas para sus notas.</string>
+    <string name="ui_space_focus_title">Enfoque de IA</string>
+    <string name="ui_space_focus_badge">ENFOQUE IA</string>
+    <string name="ui_space_focus_add">+ Añadir enfoque de IA</string>
+    <string name="ui_space_focus_add_hint">Orienta hallazgos y borradores</string>
+    <string name="ui_space_add_to_space">Añadir al espacio</string>
+    <string name="ui_media_edit_caption">Editar descripción</string>
+    <string name="ui_note_set_reminder">Programar recordatorio</string>
+    <string name="ui_note_change_reminder">Cambiar recordatorio</string>
+    <string name="ui_questions_drafts_section">Borradores por revisar</string>
+    <string name="ui_questions_open_section">Preguntas abiertas</string>
+    <string name="ui_question_keep">Guardar</string>
+    <string name="ui_question_discard">Descartar</string>
+    <string name="ui_question_discard_all">Descartar todo</string>
+    <string name="ui_questions_subtitle_draft_one">1 borrador por revisar</string>
+    <string name="ui_questions_subtitle_drafts_only">%1$d borradores por revisar</string>
+    <string name="ui_questions_subtitle_mixed">%1$d abiertas · %2$d borradores por revisar</string>
 </resources>

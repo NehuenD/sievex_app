@@ -21,9 +21,41 @@ object LlamaBridge {
         fun onPhase(phase: Int)
     }
 
+    @Volatile
+    private var nativeLibDir: String? = null
+
+    @Volatile
+    private var backendsReady = false
+
     init {
         System.loadLibrary("sievex_llm")
     }
+
+    /** Records the app's native library directory so ggml can dynamically load CPU backend variants. */
+    fun setNativeLibDir(path: String?) {
+        if (!path.isNullOrBlank()) {
+            nativeLibDir = path
+        }
+    }
+
+    fun ensureBackendsInitialized(): Boolean {
+        if (backendsReady) return true
+        synchronized(this) {
+            if (backendsReady) return true
+            val ok = nativeInitBackends(nativeLibDir ?: "")
+            if (ok) {
+                backendsReady = true
+            }
+            return ok
+        }
+    }
+
+    /** Returns the most recent native failure description, or empty when none. */
+    fun lastError(): String = runCatching { nativeLastError() }.getOrDefault("")
+
+    external fun nativeInitBackends(libDir: String): Boolean
+
+    external fun nativeLastError(): String
 
     /** Loads the model and its context once. Safe and cheap to call on every job. */
     external fun nativeLoad(path: String): Boolean

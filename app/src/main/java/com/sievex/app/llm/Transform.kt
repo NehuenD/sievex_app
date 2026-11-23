@@ -23,7 +23,8 @@ object Transform {
         val why: String,
         val question: String,
         val tags: List<String>,
-        val items: List<String> = emptyList()
+        val items: List<String> = emptyList(),
+        val questionDrafts: List<String> = emptyList()
     )
 
     /**
@@ -38,7 +39,7 @@ Fields:
 - title: at most 8 words, no trailing period
 - one_line: one sentence, at most 160 characters
 - why_it_matters: one or two sentences of your own inference, or an empty string
-- open_question: one question to chase later, or an empty string
+- question_drafts: 0 to 3 short, distinct follow-up questions strictly grounded in what the speaker actually said (steered by Space focus if provided), or an empty array when nothing needs chasing
 - tags: up to 4 lowercase single words
 
 Choose mode by intent, not topic: insight means something was understood, idea means something might be built, action means something must be done, reference means something should be looked up, question means an open puzzle, reflection means how something landed."""
@@ -69,40 +70,55 @@ Use only what the speaker actually said. Never invent a step, and never split on
      * echoed transcript. llama.cpp samples from `root`, and the grammar supplies the opening brace.
      */
     private const val NOTE_GRAMMAR = """root ::= object
-object ::= "{" ws "\"mode\"" ws ":" ws mode ws "," ws "\"title\"" ws ":" ws string ws "," ws "\"one_line\"" ws ":" ws string ws "," ws "\"why_it_matters\"" ws ":" ws string ws "," ws "\"open_question\"" ws ":" ws string ws "," ws "\"tags\"" ws ":" ws string-list ws "}"
+object ::= "{" "\"mode\"" ":" mode "," "\"title\"" ":" string "," "\"one_line\"" ":" string "," "\"why_it_matters\"" ":" string "," "\"question_drafts\"" ":" string-list "," "\"tags\"" ":" string-list "}"
 mode ::= "\"insight\"" | "\"idea\"" | "\"action\"" | "\"reference\"" | "\"question\"" | "\"reflection\""
-string-list ::= "[" ws (string (ws "," ws string)*)? ws "]"
+string-list ::= "[" (string ("," string)*)? "]"
 string ::= "\"" char* "\""
 char ::= [^"\\\x7F\x00-\x1F] | [\\] (["\\bfnrt] | "u" [0-9a-fA-F]{4})
-ws ::= [ \t\n\r]*
 """
 
     /** The same string-list shape, without the note-only fields. Used by list and steps. */
     private const val ITEMS_GRAMMAR = """root ::= object
-object ::= "{" ws "\"title\"" ws ":" ws string ws "," ws "\"items\"" ws ":" ws string-list ws "," ws "\"tags\"" ws ":" ws string-list ws "}"
-string-list ::= "[" ws (string (ws "," ws string)*)? ws "]"
+object ::= "{" "\"title\"" ":" string "," "\"items\"" ":" string-list "," "\"tags\"" ":" string-list "}"
+string-list ::= "[" (string ("," string)*)? "]"
 string ::= "\"" char* "\""
 char ::= [^"\\\x7F\x00-\x1F] | [\\] (["\\bfnrt] | "u" [0-9a-fA-F]{4})
-ws ::= [ \t\n\r]*
 """
 
     /**
-     * The expected reply is ~90-130 tokens for a note and less for a list. The headroom covers a
-     * long field or two and only costs anything when the model decides to ramble.
+     * The expected reply is ~100-170 tokens for a note and less for a list. The headroom covers a
+     * long field or multiple question drafts and only costs anything when the model decides to ramble.
      */
-    private const val MAX_TOKENS = 320
+    private const val MAX_TOKENS = 384
 
     /** The one retry buys room rather than dropping the grammar, which is what closes an object. */
-    private const val RETRY_TOKENS = 384
+    private const val RETRY_TOKENS = 448
 
     /** The bounds the prompts state, applied here only when a field has to be derived instead. */
     private const val TITLE_WORDS = 8
     private const val ONE_LINE_CHARS = 160
     private const val MAX_ITEMS = 24
+    private const val MAX_TRANSCRIPT_CHARS = 10_000
+    private const val SPACE_NAME_CHARS = 80
+    private const val SPACE_FOCUS_CHARS = 300
 
     private val WHITESPACE = Regex("\\s+")
 
-    fun available(filesDir: File): Boolean = TransformModel.modelFile(filesDir).length() > 0
+    fun available(filesDir: File): Boolean = TransformModel.isInstalled(filesDir)
+
+    fun ensureLoaded(filesDir: File): Boolean {
+        val model = TransformModel.modelFile(filesDir)
+        if (!TransformModel.isInstalled(filesDir)) return false
+        if (!LlamaBridge.ensureBackendsInitialized()) return false
+        return runCatching {
+            LlmGate.exclusive { LlamaBridge.nativeLoad(model.absolutePath) }
+        }.getOrDefault(false)
+    }
+
+    /** Caller must already hold [LlmGate.exclusive]. */
+    fun release() {
+        LlamaBridge.nativeUnload()
+    }
 
     /**
      * Shapes [transcript] in [format]. A [NoteFormat.PLAIN] note never calls the model: it keeps
@@ -113,11 +129,15 @@ ws ::= [ \t\n\r]*
         transcript: String,
         format: NoteFormat = NoteFormat.NOTE,
         language: String = "en",
+        spaceName: String = "",
+        spaceFocus: String = "",
         reportPhase: (Int) -> Unit = {}
     ): Fields? {
         if (!format.usesLlm) return plainFields(transcript)
         return runCatching {
-            LlmGate.exclusive { applyUnsafe(filesDir, transcript, format, language, reportPhase) }
+            LlmGate.exclusive {
+                applyUnsafe(filesDir, transcript, format, language, spaceName, spaceFocus, reportPhase)
+            }
         }
             .onFailure { CaptureLog.add("llm: failed - ${it.message}") }
             .getOrNull()
@@ -143,12 +163,20 @@ ws ::= [ \t\n\r]*
         transcript: String,
         format: NoteFormat,
         language: String,
+        spaceName: String,
+        spaceFocus: String,
         reportPhase: (Int) -> Unit
     ): Fields? {
         val model = TransformModel.modelFile(filesDir)
-        if (!model.exists() || model.length() == 0L) return null
+        if (!TransformModel.isInstalled(filesDir)) return null
+        if (!LlamaBridge.ensureBackendsInitialized()) {
+            val detail = LlamaBridge.lastError()
+            CaptureLog.add(if (detail.isNotBlank()) "llm: backend init failed - $detail" else "llm: backend init failed")
+            return null
+        }
         if (!LlamaBridge.nativeLoad(model.absolutePath)) {
-            CaptureLog.add("llm: load failed")
+            val detail = LlamaBridge.lastError()
+            CaptureLog.add(if (detail.isNotBlank()) "llm: load failed - $detail" else "llm: load failed")
             return null
         }
 
@@ -157,15 +185,20 @@ ws ::= [ \t\n\r]*
             NoteFormat.STEPS -> STEPS_SYSTEM
             else -> NOTE_SYSTEM
         }
-        val system = base + languageClause(language)
+        val system = base + languageClause(language, format)
         val grammar = if (format == NoteFormat.NOTE) NOTE_GRAMMAR else ITEMS_GRAMMAR
+        val safeTranscript = sanitizeChatMl(transcript).take(MAX_TRANSCRIPT_CHARS)
+        val safeSpaceName = sanitizeChatMl(spaceName).replace(WHITESPACE, " ").trim().take(SPACE_NAME_CHARS)
+        val safeSpaceFocus = sanitizeChatMl(spaceFocus).replace(WHITESPACE, " ").trim().take(SPACE_FOCUS_CHARS)
 
         // A retry restarts the native phase counter at 1; the card must not run backwards.
         var lastPhase = 0
         repeat(2) { attempt ->
             val prompt = buildPrompt(
                 system,
-                if (attempt == 0) transcript else retryTranscript(transcript, format)
+                if (attempt == 0) safeTranscript else retryTranscript(safeTranscript, format),
+                safeSpaceName,
+                safeSpaceFocus
             )
             // Grammar on both attempts: a truncated object is still an object prefix, and free
             // sampling is the path least likely to close it. The retry buys headroom instead.
@@ -188,9 +221,15 @@ ws ::= [ \t\n\r]*
                 progress = progress
             )
             val ms = System.currentTimeMillis() - started
+            val nativeErr = if (raw.isEmpty()) LlamaBridge.lastError() else ""
             CaptureLog.add(
-                "llm: %s attempt %d (%d tok cap) %d chars in %d ms"
-                    .format(format.id, attempt + 1, cap, raw.length, ms)
+                if (nativeErr.isNotBlank()) {
+                    "llm: %s attempt %d (%d tok cap) 0 chars in %d ms - %s"
+                        .format(format.id, attempt + 1, cap, ms, nativeErr)
+                } else {
+                    "llm: %s attempt %d (%d tok cap) %d chars in %d ms"
+                        .format(format.id, attempt + 1, cap, raw.length, ms)
+                }
             )
 
             val parsed = if (format == NoteFormat.NOTE) {
@@ -207,7 +246,7 @@ ws ::= [ \t\n\r]*
     /** Only the user turn changes on retry, so the cached system turn above it still matches. */
     private fun retryTranscript(transcript: String, format: NoteFormat): String {
         val instruction = if (format == NoteFormat.NOTE) {
-            "Keep title, one_line, why_it_matters and open_question short."
+            "Keep title, one_line, why_it_matters and question_drafts short."
         } else {
             "Keep the title short and every item a short phrase."
         }
@@ -219,26 +258,50 @@ ws ::= [ \t\n\r]*
      * follows them fine and they are already tuned — while the fields it writes are Spanish.
      * `verbatim` is untouched either way: it is the transcript, not a translation.
      */
-    private fun languageClause(language: String): String = if (language == "es") {
-        """
+    private fun languageClause(language: String, format: NoteFormat): String {
+        if (language != "es") return ""
+        return when (format) {
+            NoteFormat.LIST, NoteFormat.STEPS -> """
 
-Write title, one_line, why_it_matters and open_question in Spanish, and tags as Spanish
-single words. Keep every JSON key and the mode value exactly as specified. Do not translate or
-repeat the transcript."""
-    } else {
-        ""
+Write title and every entry in items in Spanish, and tags as Spanish single words.
+Keep every JSON key exactly as specified. Do not translate or repeat the transcript."""
+            else -> """
+
+Write title, one_line, why_it_matters and every item in question_drafts in Spanish, and tags as
+Spanish single words. Keep every JSON key and the mode value exactly as specified. Do not translate
+or repeat the transcript."""
+        }
     }
+
+    private fun sanitizeChatMl(text: String): String =
+        text.replace("<|im_start|>", "").replace("<|im_end|>", "")
 
     /**
      * ChatML with an empty assistant turn. The grammar opens the object with `{`, and a prefilled
      * brace would have to be primed out of the sampler by hand instead of being generated under
-     * the grammar like every other character.
+     * the grammar like every other character. Space context lives in the user turn so the cached
+     * system prefix remains identical across calls.
      */
-    private fun buildPrompt(system: String, transcript: String): String = buildString {
+    private fun buildPrompt(
+        system: String,
+        transcript: String,
+        spaceName: String = "",
+        spaceFocus: String = ""
+    ): String = buildString {
         append("<|im_start|>system\n")
         append(system)
         append("<|im_end|>\n")
         append("<|im_start|>user\n")
+        if (spaceName.isNotEmpty()) {
+            append("Space: ").append(spaceName).append('\n')
+        }
+        if (spaceFocus.isNotEmpty()) {
+            append("Space focus (steer why_it_matters and question_drafts toward this): ")
+                .append(spaceFocus).append('\n')
+        }
+        if (spaceName.isNotEmpty() || spaceFocus.isNotEmpty()) {
+            append('\n')
+        }
         append("Transcript:\n")
         append(transcript.trim())
         append("\n<|im_end|>\n")
@@ -261,6 +324,9 @@ repeat the transcript."""
         if (title.isEmpty() && oneLine.isEmpty() && said.isEmpty()) return null
 
         val line = oneLine.ifBlank { said.take(ONE_LINE_CHARS) }
+        val drafts = stringList(json, "question_drafts", 3).ifEmpty {
+            listOfNotNull(json.optString("open_question").trim().takeIf { it.isNotEmpty() })
+        }
 
         return Fields(
             mode = normaliseMode(json.optString("mode")),
@@ -268,8 +334,9 @@ repeat the transcript."""
             oneLine = line,
             verbatim = said,
             why = json.optString("why_it_matters").trim(),
-            question = json.optString("open_question").trim(),
-            tags = tags(json)
+            question = "",
+            tags = tags(json),
+            questionDrafts = drafts
         )
     }
 

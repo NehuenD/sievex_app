@@ -16,6 +16,9 @@ import com.sievex.app.llm.LlamaBridge
 import com.sievex.app.llm.LlmGate
 import com.sievex.app.llm.Transform
 import com.sievex.app.llm.TransformModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -25,6 +28,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -60,19 +64,6 @@ class CaptureService : Service() {
     @Volatile
     private var held = false
 
-    /**
-     * The format snapshotted when the current burst started. The picker stays tappable while
-     * recording, so reading `Formats.next` at queue time would reshape the burst being spoken.
-     */
-    @Volatile
-    private var burstFormat: String? = null
-
-    @Volatile
-    private var burstMediaIds: List<String> = emptyList()
-
-    @Volatile
-    private var burstSpaceId: String? = null
-
     /** Handler retries are posted here so they survive the worker thread finishing a drain. */
     private val mainHandler: Handler by lazy { Handler(Looper.getMainLooper()) }
     private val retryRunnable = Runnable { processNext() }
@@ -85,6 +76,7 @@ class CaptureService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        LlamaBridge.setNativeLibDir(applicationInfo.nativeLibraryDir)
         // A podcast-triggered burst can arrive after a process death, before any screen has
         // restored the picker: read the persisted choice before a job can be created.
         Formats.restore(this)
@@ -99,6 +91,7 @@ class CaptureService : Service() {
                 NoteStore.init(filesDir)
                 SpaceStore.init(filesDir)
                 JobQueue.init(filesDir)
+                MediaStore.init(filesDir)
                 // Bursts queued by an earlier process are still on disk: pick them up again.
                 // A WAV can also be on disk without a queue entry (crash between the recorder closing
                 // the file and JobQueue.add), so it is folded back into the queue before counting.
@@ -106,39 +99,50 @@ class CaptureService : Service() {
                 // Only now is the queue content final, so only now may kick() trust it.
                 queueReady = true
                 val pending = JobQueue.all().size
-                if (pending > 0) CaptureLog.add("resuming $pending queued burst(s)")
+                if (pending > 0) {
+                    CaptureLog.add("resuming $pending queued burst(s)")
+                    processNext()
+                }
             } catch (t: Throwable) {
                 CaptureLog.add("startup: ${t.message}")
             } finally {
                 storesLoaded.countDown()
             }
         }
-        processNext()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        if (intent == null) {
+            if (armed || recording) return START_STICKY
+            if (queueReady && JobQueue.peek() == null) {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            return handleKick()
+        }
+        when (intent.action) {
             ACTION_ARM -> arm()
             ACTION_DISARM -> disarm()
             ACTION_START_BURST -> {
-                if (!armed) arm()
+                if (!armed && !arm()) return START_NOT_STICKY
                 val mediaIds = intent.getStringArrayListExtra(EXTRA_MEDIA_IDS)?.toList() ?: emptyList()
                 val spaceId = intent.getStringExtra(EXTRA_SPACE_ID)?.takeIf { it.isNotBlank() }
-                startBurst(intent.getStringExtra(EXTRA_WHY) ?: "manual", mediaIds, spaceId)
+                val appendNoteId = intent.getLongExtra(EXTRA_APPEND_NOTE_ID, 0L).takeIf { it > 0L }
+                startBurst(intent.getStringExtra(EXTRA_WHY) ?: "manual", mediaIds, spaceId, appendNoteId)
             }
             ACTION_STOP_BURST -> stopBurst()
+            ACTION_CANCEL_BURST -> cancelBurst()
             ACTION_KICK -> return handleKick()
         }
-        return START_STICKY
+        return if (armed || recording || kickDrain) START_STICKY else START_NOT_STICKY
     }
 
     override fun onDestroy() {
         mainHandler.removeCallbacks(retryRunnable)
-        recording = false
-        isRecording = false
+        setRecordingState(false)
         recorder?.stop()
         recorder = null
-        armed = false
+        setArmedState(false)
         kickDrain = false
         // The process may outlive the service (the media listener keeps it alive), so the models
         // are given back here rather than waiting for the process to die with them. A queued job
@@ -152,20 +156,52 @@ class CaptureService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun arm() {
-        armed = true
+    private fun setRecordingState(value: Boolean, appendNoteId: Long? = if (value) _appendNoteIdFlow.value else null) {
+        recording = value
+        isRecording = value
+        recordingStartedAt = if (value) {
+            if (recordingStartedAt > 0L) recordingStartedAt else System.currentTimeMillis()
+        } else {
+            0L
+        }
+        _appendNoteIdFlow.value = if (value) appendNoteId else null
+        _recordingFlow.value = value
+        QuickCaptureTileService.requestRefresh(this)
+        CaptureWidgetProvider.updateAll(this, recordingOverride = value)
+    }
+
+    private fun setArmedState(value: Boolean) {
+        armed = value
+        _armedFlow.value = value
+    }
+
+    private fun arm(): Boolean {
+        val raised = runCatching {
+            startForeground(
+                NOTIF_ID,
+                buildNotification(getString(R.string.sys_capture_armed)),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            )
+        }
+        if (raised.isFailure) {
+            CaptureLog.add("arm: startForeground refused - ${raised.exceptionOrNull()?.message}")
+            setArmedState(false)
+            stopSelf()
+            return false
+        }
+        setArmedState(true)
         // The service now has a reason of its own: a drain must not take its notification back.
         kickDrain = false
-        startForeground(NOTIF_ID, buildNotification(getString(R.string.sys_capture_armed)), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
         // Otherwise the first burst of every process pays the 652 MB encoder load and the 1.1 GB
         // LLM load inside the user's wait. Warming on the queue worker keeps the loads ordered
         // behind store init and off the thread that opens the microphone.
         WORKER.execute { warmModels() }
         CaptureLog.add("armed")
+        return true
     }
 
     private fun disarm() {
-        armed = false
+        setArmedState(false)
         stopBurst()
         // A burst that is still finishing will queue itself, and the drain it starts releases the
         // models when it runs dry; releasing here would only unload just in time for that drain to
@@ -186,13 +222,16 @@ class CaptureService : Service() {
      */
     private fun warmModels() {
         val started = System.currentTimeMillis()
-        var warm = 0
-
-        // The recognizer is 652 MB: it is the load worth paying before the burst, not after it.
+        // The recognizer is 652 MB: load it first and abort before LLM if disarmed meantime.
         val asrWarm = runCatching {
             AsrEngine.isInstalled(filesDir) && AsrEngine.ensureLoaded(filesDir)
         }.getOrDefault(false)
-        if (asrWarm) warm++
+
+        if (!armed && !recording) {
+            CaptureLog.add("warm: aborted after asr in ${System.currentTimeMillis() - started} ms")
+            releaseModels()
+            return
+        }
 
         val model = TransformModel.modelFile(filesDir)
         // A Plain burst never calls the model, so warming 1.1 GB for it only competes with the
@@ -200,39 +239,52 @@ class CaptureService : Service() {
         val needsLlm = Formats.next.usesLlm ||
             JobQueue.all().any { NoteFormat.from(it.format).usesLlm }
         if (needsLlm && model.isFile && model.length() > 0L) {
-            val llmWarm = runCatching {
-                // The native handle is single-session, so the load goes through the same gate
-                // every completion uses.
-                LlmGate.exclusive { LlamaBridge.nativeLoad(model.absolutePath) }
-            }.getOrDefault(false)
-            if (llmWarm) warm++
+            val root = filesDir
+            LLM_WARM_EXECUTOR.execute {
+                if (!armed && !recording) return@execute
+                val llmStarted = System.currentTimeMillis()
+                val llmWarm = runCatching {
+                    Transform.ensureLoaded(root)
+                }.getOrDefault(false)
+                CaptureLog.add("warm: llm=${if (llmWarm) 1 else 0} in ${System.currentTimeMillis() - llmStarted} ms")
+                if (!armed && !recording) releaseModels()
+            }
         }
 
-        CaptureLog.add("warm: $warm model(s) in ${System.currentTimeMillis() - started} ms")
-
-        // A disarm that landed while these loads were running already released what it could.
-        // Without this check the warm-up would finish afterwards and leave both resident with no
-        // session to use them, which is exactly the leak this is meant to remove.
-        if (!armed && !recording) releaseModels()
+        CaptureLog.add("warm: asr=${if (asrWarm) 1 else 0} in ${System.currentTimeMillis() - started} ms")
     }
 
     /**
      * Hands the model memory back. Both unloads are safe to repeat: the recognizer is dropped
      * under its own lock and the native side null-checks its handle under [LlmGate].
      *
-     * Runs on a short-lived daemon thread on purpose. The native handle sits behind [LlmGate],
-     * which a Lens can hold for a whole generation; waiting for it on the queue worker would stall
-     * every drain (and the foreground hand-back) behind a report the user asked for.
+     * Runs on [UNLOAD_EXECUTOR] under [releaseInFlight] deduplication so repeated releases do not
+     * spawn extra threads or block [WORKER] behind a running Lens generation.
      */
     private fun releaseModels() {
-        Thread({
-            // The session may have resumed between the request and this thread running; keeping
-            // the models warm is the whole point of arm(), so do not undo a warm-up that just ran.
-            if (!armed && !recording) {
+        WORKER.execute {
+            if (!armed && !recording && !kickDrain && JobQueue.peek() == null) {
                 runCatching { AsrEngine.unload() }
-                runCatching { LlmGate.exclusive { LlamaBridge.nativeUnload() } }
             }
-        }, "sievex-unload").apply { isDaemon = true }.start()
+        }
+        if (!releaseInFlight.compareAndSet(false, true)) return
+        UNLOAD_EXECUTOR.execute {
+            try {
+                // Re-check after acquiring LlmGate so a concurrent re-arm, Lens run, or queued
+                // kick-drain cannot have its freshly loaded model yanked right out from under it.
+                runCatching {
+                    LlmGate.exclusive {
+                        if (!armed && !recording && burstsInFlight.get() == 0 && !kickDrain &&
+                            JobQueue.peek() == null && !LensService.isRunning()
+                        ) {
+                            Transform.release()
+                        }
+                    }
+                }
+            } finally {
+                releaseInFlight.set(false)
+            }
+        }
     }
 
     /**
@@ -244,13 +296,16 @@ class CaptureService : Service() {
         // kills the process. When the service is already armed its slot and text are its own.
         if (!armed) {
             val raised = runCatching {
-                startForeground(NOTIF_ID, buildNotification(getString(R.string.sys_capture_processing_queued)))
+                startForeground(
+                    NOTIF_ID,
+                    buildNotification(getString(R.string.sys_capture_processing_queued)),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                )
             }
             if (raised.isFailure) {
                 // Never leave the foreground obligation hanging: stopping clears it. The queue
                 // is durable, so the next kick picks the work up again.
                 CaptureLog.add("kick: startForeground refused - ${raised.exceptionOrNull()?.message}")
-                WORKER.execute { kickDrainNow() }
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -259,7 +314,7 @@ class CaptureService : Service() {
         // Read the queue on the worker: jobs.json may not be loaded yet when the platform
         // delivers this intent straight after onCreate.
         WORKER.execute { kickDrainNow() }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     /** Runs on the worker, so the job queue is necessarily initialised by the time it is read. */
@@ -280,36 +335,34 @@ class CaptureService : Service() {
     fun startBurst(
         why: String,
         mediaIds: List<String> = emptyList(),
-        spaceId: String? = null
+        spaceId: String? = null,
+        appendNoteId: Long? = null
     ) {
         if (recording) return
         if (!armed) {
             CaptureLog.add("burst ignored, not armed ($why)")
             return
         }
-        val next = BurstRecorder(this) { file -> processBurst(file) }
+        // Snapshot per-burst metadata into locals so overlapping bursts never clobber one another.
+        val snapshotFormat = Formats.next.id
+        val snapshotMediaIds = mediaIds
+        val snapshotSpaceId = spaceId
+        val snapshotAppendNoteId = appendNoteId
+        val next = BurstRecorder(this) { file ->
+            processBurst(file, snapshotFormat, snapshotMediaIds, snapshotSpaceId, snapshotAppendNoteId)
+        }
         recorder = next
-        // Snapshot the shape now: the picker stays on screen while recording, and changing it must
-        // apply to the next burst, not the one being spoken.
-        burstFormat = Formats.next.id
-        burstMediaIds = mediaIds
-        burstSpaceId = spaceId
         // Set before the capture thread starts: a recorder that dies on its first read invokes
         // onComplete() immediately, and processBurst() has to see the state stopBurst() leaves
         // behind, not a service that still believes it is recording.
-        recording = true
-        isRecording = true
+        setRecordingState(true, appendNoteId = snapshotAppendNoteId)
         burstsInFlight.incrementAndGet()
         val file = runCatching { next.start() }.getOrNull()
         if (file == null) {
             // start() returned null, so no capture thread exists and no onComplete can fire.
             burstsInFlight.updateAndGet { current -> (current - 1).coerceAtLeast(0) }
-            recording = false
-            isRecording = false
+            setRecordingState(false)
             recorder = null
-            burstFormat = null
-            burstMediaIds = emptyList()
-            burstSpaceId = null
             CaptureLog.add("burst failed to start ($why)")
             return
         }
@@ -323,8 +376,7 @@ class CaptureService : Service() {
 
     fun stopBurst() {
         if (!recording) return
-        recording = false
-        isRecording = false
+        setRecordingState(false)
         Pipeline.transcribing()
         recorder?.stop()
         recorder = null
@@ -332,13 +384,34 @@ class CaptureService : Service() {
         nm.notify(NOTIF_ID, buildNotification(getString(R.string.sys_capture_armed)))
     }
 
+    fun cancelBurst() {
+        if (!recording) return
+        setRecordingState(false)
+        Pipeline.reset()
+        recorder?.cancel()
+        recorder = null
+        val nm = getSystemService(NotificationManager::class.java)
+        if (armed) {
+            nm.notify(NOTIF_ID, buildNotification(getString(R.string.sys_capture_armed)))
+        } else if (!kickDrain && JobQueue.peek() == null) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
+    }
+
     /**
      * A burst just finished: write it to the durable queue and return. Nothing is transcribed
      * on the recorder thread, so a process death between here and the note loses no audio.
      */
-    private fun processBurst(file: File) {
+    private fun processBurst(
+        file: File,
+        format: String,
+        mediaIds: List<String>,
+        spaceId: String?,
+        appendNoteId: Long? = null
+    ) {
         try {
-            processBurstNow(file)
+            processBurstNow(file, format, mediaIds, spaceId, appendNoteId)
         } finally {
             // The burst is on disk or already queued; either way this recorder thread is done, and
             // that is what makes a pending release safe.
@@ -346,13 +419,18 @@ class CaptureService : Service() {
         }
     }
 
-    private fun processBurstNow(file: File) {
+    private fun processBurstNow(
+        file: File,
+        format: String,
+        mediaIds: List<String>,
+        spaceId: String?,
+        appendNoteId: Long? = null
+    ) {
         // The recorder caps a burst at 90 s and stops itself, which bypasses stopBurst(). Without
         // this the service would believe it is still recording: the next pause would be ignored
         // and the queue would never be allowed to release the foreground slot.
         if (recording && recorder?.currentFile?.absolutePath == file.absolutePath) {
-            recording = false
-            isRecording = false
+            setRecordingState(false)
             recorder = null
             // The cap ended this burst the way stopBurst() would, so the UI must leave IDLE.
             Pipeline.transcribing()
@@ -361,15 +439,21 @@ class CaptureService : Service() {
                 nm.notify(NOTIF_ID, buildNotification(getString(R.string.sys_capture_armed)))
             }
         }
+        if (!file.isFile || file.length() == 0L) {
+            CaptureLog.add("burst produced no audio (${file.name})")
+            return
+        }
         // The stores load on the worker; a burst that ends before that must not add its job to an
         // uninitialised queue, where the entry would live only in memory. The WAV is on disk, so
         // orphan recovery is the backstop if this ever times out.
         try {
             if (!storesLoaded.await(STORE_READY_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
                 CaptureLog.add("jobs: stores not ready, ${file.name} left for orphan recovery")
+                return
             }
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
+            return
         }
         // Orphan recovery may already have queued this exact file; one WAV never gets two jobs.
         if (JobQueue.all().any { it.wavPath == file.absolutePath }) {
@@ -380,17 +464,13 @@ class CaptureService : Service() {
         val job = Job(
             id = UUID.randomUUID().toString(),
             wavPath = file.absolutePath,
-            spaceId = burstSpaceId ?: SpaceStore.currentSpaceId,
+            spaceId = spaceId ?: SpaceStore.currentSpaceId,
             attempts = 0,
-            // Read now, not when the job drains: the user may change the format for the next
-            // burst while this one is still queued.
-            format = burstFormat ?: Formats.next.id,
-            mediaIds = burstMediaIds
+            format = format,
+            mediaIds = mediaIds,
+            appendNoteId = appendNoteId
         )
         JobQueue.add(job)
-        burstFormat = null
-        burstMediaIds = emptyList()
-        burstSpaceId = null
         CaptureLog.add("queued ${file.name}${job.spaceId?.let { " into $it" } ?: ""}")
         processNext()
     }
@@ -418,9 +498,9 @@ class CaptureService : Service() {
             // A job that already burned every attempt can only ever fail again. Drop it and
             // keep going instead of peeking the same head forever and wedging the queue.
             if (job.attempts >= JobQueue.MAX_ATTEMPTS) {
+                quarantineWav(job, "attempts exhausted")
                 JobQueue.remove(job.id)
                 CaptureLog.add("job ${job.id}: dropped, ${job.attempts} attempts already spent")
-                quarantineWav(job, "attempts exhausted")
                 continue
             }
 
@@ -535,6 +615,14 @@ class CaptureService : Service() {
             return false
         }
 
+        val format = NoteFormat.from(job.format)
+        if (job.appendNoteId == null && format.usesLlm) {
+            val root = filesDir
+            LLM_WARM_EXECUTOR.execute {
+                runCatching { Transform.ensureLoaded(root) }
+            }
+        }
+
         CaptureLog.add("transcribing ${file.name}")
         Pipeline.transcribing()
         val text = AsrEngine.transcribe(filesDir, job.wavPath)
@@ -562,21 +650,45 @@ class CaptureService : Service() {
             return true
         }
 
-        val format = NoteFormat.from(job.format)
-        Pipeline.transforming(format)
         val time = SimpleDateFormat("HH:mm", Locale.US).format(Date())
         val whenText = "Today $time"
-        val structured = Transform.apply(
-            filesDir,
-            text,
-            format,
-            AppLocale.modelLanguage(this)
-        ) { phase ->
-            Pipeline.transformingStep(phase)
+
+        // Follow-up voice bursts append cleanly to their target note without re-running Transform.
+        val appendTargetId = job.appendNoteId
+        if (appendTargetId != null) {
+            val appended = NoteStore.appendFollowUp(
+                appendTargetId,
+                NoteFollowUp(
+                    text = text.trim(),
+                    whenText = whenText,
+                    createdAt = System.currentTimeMillis(),
+                    audioPath = file.absolutePath
+                )
+            )
+            if (appended != null) {
+                Pipeline.done(appended.title, appended.id)
+                JobQueue.remove(job.id)
+                CaptureLog.add("job ${job.id}: appended follow-up to note ${appended.id}")
+                return true
+            }
+            // Target note was deleted while queued: fall through to filing as a standalone note.
         }
 
         // The space could have been deleted while this burst sat in the queue.
         val spaceId = job.spaceId?.takeIf { id -> SpaceStore.all().any { it.id == id } }
+        val (spaceName, spaceFocus) = SpaceStore.focusFor(spaceId)
+
+        Pipeline.transforming(format)
+        val structured = Transform.apply(
+            filesDir,
+            text,
+            format,
+            AppLocale.modelLanguage(this),
+            spaceName = spaceName,
+            spaceFocus = spaceFocus
+        ) { phase ->
+            Pipeline.transformingStep(phase)
+        }
 
         val note = if (structured != null) {
             CaptureLog.add("transform: ${structured.mode} / ${structured.title}")
@@ -594,10 +706,11 @@ class CaptureService : Service() {
                 spaceId = spaceId,
                 format = format.id,
                 items = structured.items,
-                createdAt = System.currentTimeMillis()
+                createdAt = System.currentTimeMillis(),
+                questionDrafts = structured.questionDrafts
             )
         } else {
-            val words = text.split(Regex("\\s+")).filter { it.isNotBlank() }
+            val words = text.split(WHITESPACE_REGEX).filter { it.isNotBlank() }
             val title = words.take(9).joinToString(" ").trimEnd('.', ',', ';', ':')
             CaptureLog.add("transform unavailable, filing raw transcript")
             StoredNote(
@@ -622,7 +735,7 @@ class CaptureService : Service() {
         if (job.mediaIds.isNotEmpty()) {
             MediaStore.linkNoteToMedia(job.mediaIds, note.id)
         }
-        Pipeline.done(note.title)
+        Pipeline.done(note.title, note.id)
         CaptureLog.add("note filed")
         JobQueue.remove(job.id)
         CaptureLog.add("job ${job.id}: filed as note ${note.id}")
@@ -633,15 +746,15 @@ class CaptureService : Service() {
     private fun retryOrDrop(job: Job, error: String) {
         val attempts = JobQueue.bumpAttempts(job.id, error)
         if (attempts >= JobQueue.MAX_ATTEMPTS) {
+            quarantineWav(job, error)
             JobQueue.remove(job.id)
             CaptureLog.add("job ${job.id}: dropped after $attempts attempts - $error")
-            quarantineWav(job, error)
         }
     }
 
     /** True when a note already owns this audio, so filing it again would duplicate a note. */
     private fun isFiled(wavPath: String): Boolean =
-        NoteStore.all().any { it.audioPath == wavPath }
+        NoteStore.hasAudioPath(wavPath)
 
     /**
      * A dropped job's WAV is moved out of `bursts/` so orphan recovery cannot queue it again
@@ -704,17 +817,20 @@ class CaptureService : Service() {
 
         val known = HashSet<String>()
         JobQueue.all().forEach { known.add(File(it.wavPath).absolutePath) }
-        NoteStore.all().forEach { note -> note.audioPath?.let { known.add(File(it).absolutePath) } }
+        NoteStore.all().forEach { note ->
+            note.audioPath?.let { known.add(File(it).absolutePath) }
+            note.followUps.forEach { fu -> fu.audioPath?.let { known.add(File(it).absolutePath) } }
+        }
 
         val orphans = dir.listFiles { f ->
             f.isFile && f.extension.equals("wav", ignoreCase = true) && f.length() > 0L
         } ?: return
         if (orphans.isEmpty()) return
 
-        var recovered = 0
+        val recoveredJobs = mutableListOf<Job>()
         orphans.sortedBy { it.name }.forEach { wav ->
             if (wav.absolutePath in known) return@forEach
-            JobQueue.add(
+            recoveredJobs.add(
                 Job(
                     id = UUID.randomUUID().toString(),
                     wavPath = wav.absolutePath,
@@ -726,9 +842,11 @@ class CaptureService : Service() {
                 )
             )
             CaptureLog.add("recovered orphan ${wav.name}")
-            recovered++
         }
-        if (recovered > 0) CaptureLog.add("recovered $recovered orphan burst(s)")
+        if (recoveredJobs.isNotEmpty()) {
+            JobQueue.addAll(recoveredJobs)
+            CaptureLog.add("recovered ${recoveredJobs.size} orphan burst(s)")
+        }
     }
 
     private fun buildNotification(text: String): Notification =
@@ -745,10 +863,12 @@ class CaptureService : Service() {
         const val ACTION_DISARM = "com.sievex.DISARM"
         const val ACTION_START_BURST = "com.sievex.START_BURST"
         const val ACTION_STOP_BURST = "com.sievex.STOP_BURST"
+        const val ACTION_CANCEL_BURST = "com.sievex.CANCEL_BURST"
         const val ACTION_KICK = "com.sievex.KICK"
         const val EXTRA_WHY = "why"
         const val EXTRA_MEDIA_IDS = "media_ids"
         const val EXTRA_SPACE_ID = "space_id"
+        const val EXTRA_APPEND_NOTE_ID = "append_note_id"
 
         private const val CHANNEL = "capture"
         private const val NOTIF_ID = 42
@@ -767,9 +887,29 @@ class CaptureService : Service() {
             Thread(r, "sievex-jobs").apply { isDaemon = true }
         }
 
+        private val LLM_WARM_EXECUTOR: ExecutorService = Executors.newSingleThreadExecutor { r ->
+            Thread(r, "sievex-llm-warm").apply { isDaemon = true }
+        }
+
+        private val UNLOAD_EXECUTOR: ExecutorService = Executors.newSingleThreadExecutor { r ->
+            Thread(r, "sievex-unload").apply { isDaemon = true }
+        }
+
+        private val releaseInFlight = AtomicBoolean(false)
+        private val WHITESPACE_REGEX = Regex("\\s+")
+
         /** True once the worker has loaded jobs.json, so [kick] can answer without touching disk. */
         @Volatile
         private var queueReady = false
+
+        private val _armedFlow = MutableStateFlow(false)
+        val armedFlow: StateFlow<Boolean> = _armedFlow.asStateFlow()
+
+        private val _recordingFlow = MutableStateFlow(false)
+        val recordingFlow: StateFlow<Boolean> = _recordingFlow.asStateFlow()
+
+        private val _appendNoteIdFlow = MutableStateFlow<Long?>(null)
+        val appendNoteIdFlow: StateFlow<Long?> = _appendNoteIdFlow.asStateFlow()
 
         @Volatile
         var armed = false
@@ -782,6 +922,38 @@ class CaptureService : Service() {
         @Volatile
         var isRecording = false
             private set
+
+        @Volatile
+        var recordingStartedAt = 0L
+            private set
+
+        fun cancelCurrentBurst() {
+            instance?.cancelBurst()
+        }
+
+        /** Unloads the native LLM when idle and no Lens/Capture work is active. */
+        fun requestIdleLlmUnload() {
+            if (armed || isRecording || LensService.isRunning() || JobQueue.peek() != null) return
+            if (!releaseInFlight.compareAndSet(false, true)) return
+            UNLOAD_EXECUTOR.execute {
+                try {
+                    runCatching {
+                        LlmGate.exclusive {
+                            val svc = instance
+                            val busy = armed || isRecording || LensService.isRunning() ||
+                                JobQueue.peek() != null ||
+                                (svc?.burstsInFlight?.get() ?: 0) > 0 ||
+                                (svc?.kickDrain ?: false)
+                            if (!busy) {
+                                Transform.release()
+                            }
+                        }
+                    }
+                } finally {
+                    releaseInFlight.set(false)
+                }
+            }
+        }
 
         /**
          * Asks the service to drain the queue. Safe from any thread and from the background:
@@ -820,6 +992,18 @@ class CaptureService : Service() {
                 .putExtra(EXTRA_WHY, why)
                 .putStringArrayListExtra(EXTRA_MEDIA_IDS, ArrayList(mediaIds))
             if (!spaceId.isNullOrBlank()) intent.putExtra(EXTRA_SPACE_ID, spaceId)
+            context.startForegroundService(intent)
+        }
+
+        fun sendFollowUpBurst(
+            context: Context,
+            noteId: Long,
+            why: String = "followup"
+        ) {
+            val intent = Intent(context, CaptureService::class.java)
+                .setAction(ACTION_START_BURST)
+                .putExtra(EXTRA_WHY, why)
+                .putExtra(EXTRA_APPEND_NOTE_ID, noteId)
             context.startForegroundService(intent)
         }
 

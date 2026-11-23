@@ -1,0 +1,4 @@
+-keep class com.sievex.app.llm.LlamaBridge { *; }
+-keep interface com.sievex.app.llm.LlamaBridge$TransformProgress { *; }
+-keep class * implements com.sievex.app.llm.LlamaBridge$TransformProgress { void onPhase(int); }
+-keep class com.k2fsa.sherpa.onnx.** { *; }

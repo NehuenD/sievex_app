@@ -2,15 +2,20 @@ package com.sievex.app
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.webkit.MimeTypeMap
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
 import java.util.UUID
+import java.util.concurrent.Executors
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -45,10 +50,39 @@ data class MediaItem(
 object MediaStore {
 
     private const val THUMB_MAX_PX = 320
+    private val EXT_REGEX = Regex("[a-z0-9]{1,8}")
+    private val HEX_CHARS = "0123456789abcdef".toCharArray()
+    private val OCR_WORKER = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "sievex-ocr").apply { isDaemon = true }
+    }
+
+    private val _version = MutableStateFlow(0L)
+    val version: StateFlow<Long> = _version.asStateFlow()
 
     private val items = mutableListOf<MediaItem>()
+    private val inFlightPaths = HashMap<String, Int>()
+    @Volatile
     private var rootDir: File? = null
     private var mediaFile: File? = null
+
+    private fun enterInFlight(path: String) {
+        inFlightPaths[path] = (inFlightPaths[path] ?: 0) + 1
+    }
+
+    private fun leaveInFlight(path: String) {
+        val left = (inFlightPaths[path] ?: 0) - 1
+        if (left <= 0) inFlightPaths.remove(path) else inFlightPaths[path] = left
+    }
+
+    private fun toHex(bytes: ByteArray): String {
+        val out = CharArray(bytes.size * 2)
+        for (i in bytes.indices) {
+            val v = bytes[i].toInt() and 0xff
+            out[i * 2] = HEX_CHARS[v ushr 4]
+            out[i * 2 + 1] = HEX_CHARS[v and 0x0f]
+        }
+        return String(out)
+    }
 
     @Volatile
     private var writesBlocked = false
@@ -103,7 +137,7 @@ object MediaStore {
         val mime = context.contentResolver.getType(uri)
         val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)
             ?.lowercase()
-            ?.takeIf { it.matches(Regex("[a-z0-9]{1,8}")) }
+            ?.takeIf { it.matches(EXT_REGEX) }
             ?: "jpg"
 
         val tmpFile = File(originalsDir, "tmp_${UUID.randomUUID()}.bin")
@@ -134,7 +168,7 @@ object MediaStore {
             return null
         }
 
-        val sha256 = digest.digest().joinToString("") { "%02x".format(it) }
+        val sha256 = toHex(digest.digest())
         val cleanCaption = caption.trim()
 
         // If this exact image is already in the target space, reuse it without duplicating.
@@ -160,77 +194,117 @@ object MediaStore {
         val finalOriginal = File(root, relOriginal)
         val finalThumb = File(root, relThumb)
 
-        if (finalOriginal.exists() && finalOriginal.length() == totalBytes) {
-            tmpFile.delete()
-        } else {
-            if (!tmpFile.renameTo(finalOriginal)) {
-                runCatching { tmpFile.copyTo(finalOriginal, overwrite = true) }
+        synchronized(this) {
+            enterInFlight(relOriginal)
+            enterInFlight(relThumb)
+        }
+        try {
+            if (finalOriginal.exists() && finalOriginal.length() == totalBytes) {
                 tmpFile.delete()
-            }
-        }
-
-        var width = 0
-        var height = 0
-        val decoded = runCatching {
-            val source = ImageDecoder.createSource(finalOriginal)
-            val bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
-                width = info.size.width
-                height = info.size.height
-                val longest = max(width, height)
-                if (longest > THUMB_MAX_PX && longest > 0) {
-                    val scale = THUMB_MAX_PX.toFloat() / longest.toFloat()
-                    val tw = (width * scale).roundToInt().coerceAtLeast(1)
-                    val th = (height * scale).roundToInt().coerceAtLeast(1)
-                    decoder.setTargetSize(tw, th)
+            } else {
+                if (!tmpFile.renameTo(finalOriginal)) {
+                    runCatching { tmpFile.copyTo(finalOriginal, overwrite = true) }
+                    tmpFile.delete()
                 }
-                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
             }
-            try {
-                if (!finalThumb.exists() || finalThumb.length() == 0L) {
-                    FileOutputStream(finalThumb).use { out ->
-                        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+
+            var width = 0
+            var height = 0
+            var decoded = false
+            if (finalThumb.exists() && finalThumb.length() > 0L) {
+                val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(finalOriginal.absolutePath, opts)
+                if (opts.outWidth > 0 && opts.outHeight > 0) {
+                    width = opts.outWidth
+                    height = opts.outHeight
+                    decoded = true
+                }
+            }
+            if (!decoded) {
+                decoded = runCatching {
+                    val source = ImageDecoder.createSource(finalOriginal)
+                    val bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                        width = info.size.width
+                        height = info.size.height
+                        val longest = max(width, height)
+                        if (longest > THUMB_MAX_PX && longest > 0) {
+                            val scale = THUMB_MAX_PX.toFloat() / longest.toFloat()
+                            val tw = (width * scale).roundToInt().coerceAtLeast(1)
+                            val th = (height * scale).roundToInt().coerceAtLeast(1)
+                            decoder.setTargetSize(tw, th)
+                        }
+                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
                     }
+                    try {
+                        if (!finalThumb.exists() || finalThumb.length() == 0L) {
+                            val tmpThumb = File(thumbsDir, "tmp_${UUID.randomUUID()}.jpg")
+                            FileOutputStream(tmpThumb).use { out ->
+                                bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+                                out.fd.sync()
+                            }
+                            if (!tmpThumb.renameTo(finalThumb)) {
+                                tmpThumb.copyTo(finalThumb, overwrite = true)
+                                tmpThumb.delete()
+                            }
+                        }
+                    } finally {
+                        bitmap.recycle()
+                    }
+                    true
+                }.getOrElse { e ->
+                    CaptureLog.add("media: decode failed - ${e.message}")
+                    false
                 }
-            } finally {
-                bitmap.recycle()
             }
-            true
-        }.getOrElse { e ->
-            CaptureLog.add("media: decode failed - ${e.message}")
-            false
-        }
 
-        if (!decoded) {
-            // Only remove the physical file if no other item references it.
+            if (!decoded) {
+                return null
+            }
+
+            val item = MediaItem(
+                id = "md_" + UUID.randomUUID().toString().replace("-", "").take(12),
+                spaceId = spaceId,
+                noteIds = emptyList(),
+                file = relOriginal,
+                thumb = relThumb,
+                caption = cleanCaption,
+                addedAt = System.currentTimeMillis(),
+                width = width,
+                height = height,
+                bytes = totalBytes,
+                sha256 = sha256,
+                ocrText = "",
+                ocrScanned = false
+            )
+
+            synchronized(this) {
+                val existingInSpace = items.firstOrNull { it.spaceId == spaceId && it.sha256 == sha256 }
+                if (existingInSpace != null) {
+                    if (cleanCaption.isNotBlank() && existingInSpace.caption.isBlank()) {
+                        val idx = items.indexOfFirst { it.id == existingInSpace.id }
+                        if (idx >= 0) {
+                            val updated = existingInSpace.copy(caption = cleanCaption)
+                            items[idx] = updated
+                            save()
+                            return updated
+                        }
+                    }
+                    return existingInSpace
+                }
+                items.add(0, item)
+                save()
+            }
+            OCR_WORKER.execute { ensureOcr(item.id) }
+            CaptureLog.add("media: imported ${item.id} into $spaceId (${width}x${height})")
+            return item
+        } finally {
+            synchronized(this) {
+                leaveInFlight(relOriginal)
+                leaveInFlight(relThumb)
+            }
             deleteFileIfUnreferenced(relOriginal, finalOriginal)
             deleteFileIfUnreferenced(relThumb, finalThumb)
-            return null
         }
-
-        val ocrResult = OcrEngine.extractText(finalOriginal)
-
-        val item = MediaItem(
-            id = "md_" + UUID.randomUUID().toString().replace("-", "").take(12),
-            spaceId = spaceId,
-            noteIds = emptyList(),
-            file = relOriginal,
-            thumb = relThumb,
-            caption = cleanCaption,
-            addedAt = System.currentTimeMillis(),
-            width = width,
-            height = height,
-            bytes = totalBytes,
-            sha256 = sha256,
-            ocrText = ocrResult ?: "",
-            ocrScanned = ocrResult != null
-        )
-
-        synchronized(this) {
-            items.add(0, item)
-            save()
-        }
-        CaptureLog.add("media: imported ${item.id} into $spaceId (${width}x${height}, ocr=${item.ocrText.length} chars)")
-        return item
     }
 
     /** Runs offline OCR on [id] if it has not been scanned yet, persisting the result. */
@@ -252,9 +326,27 @@ object MediaStore {
     /** Ensures every image in [spaceId] has been OCR-scanned before a Lens reads the space. */
     fun ensureOcrForSpace(spaceId: String) {
         val pending = synchronized(this) {
-            items.filter { it.spaceId == spaceId && !it.ocrScanned }.map { it.id }
+            items.filter { it.spaceId == spaceId && !it.ocrScanned }
+                .mapNotNull { m -> resolveFile(m.file)?.let { f -> m.id to f } }
         }
-        pending.forEach { ensureOcr(it) }
+        if (pending.isEmpty()) return
+        val results = ArrayList<Pair<String, String>>(pending.size)
+        for ((id, file) in pending) {
+            val text = OcrEngine.extractText(file) ?: continue
+            results.add(id to text)
+        }
+        if (results.isEmpty()) return
+        synchronized(this) {
+            var changed = false
+            for ((id, text) in results) {
+                val i = items.indexOfFirst { it.id == id }
+                if (i >= 0 && !items[i].ocrScanned) {
+                    items[i] = items[i].copy(ocrText = text, ocrScanned = true)
+                    changed = true
+                }
+            }
+            if (changed) save()
+        }
     }
 
     @Synchronized
@@ -295,12 +387,25 @@ object MediaStore {
     }
 
     @Synchronized
+    fun unlinkNote(noteId: Long) {
+        var changed = false
+        for (i in items.indices) {
+            if (noteId in items[i].noteIds) {
+                items[i] = items[i].copy(noteIds = items[i].noteIds - noteId)
+                changed = true
+            }
+        }
+        if (changed) save()
+    }
+
+    @Synchronized
     fun delete(id: String) {
         val removed = items.filter { it.id == id }
         if (removed.isEmpty()) return
         items.removeAll { it.id == id }
         save()
         cleanupOrphanFiles(removed)
+        ReminderStore.cancelForTarget(null, ReminderTargetType.MEDIA, id)
         CaptureLog.add("media: deleted $id")
     }
 
@@ -314,6 +419,7 @@ object MediaStore {
         if (removed.isEmpty()) return
         items.removeAll { it.spaceId == spaceId }
         save()
+        removed.forEach { ReminderStore.cancelForTarget(null, ReminderTargetType.MEDIA, it.id) }
         cleanupOrphanFiles(removed)
         CaptureLog.add("media: deleted ${removed.size} item(s) for space $spaceId")
     }
@@ -329,7 +435,7 @@ object MediaStore {
     private fun deleteFileIfUnreferenced(relPath: String, target: File) {
         if (relPath.isBlank()) return
         val stillUsed = synchronized(this) {
-            items.any { it.file == relPath || it.thumb == relPath }
+            relPath in inFlightPaths || items.any { it.file == relPath || it.thumb == relPath }
         }
         if (!stillUsed && target.exists()) {
             target.delete()
@@ -380,6 +486,7 @@ object MediaStore {
         parsed.onSuccess { loaded ->
             items.clear()
             items.addAll(loaded)
+            _version.value++
         }.onFailure { e ->
             CaptureLog.add("media: load failed - ${e.message}")
             quarantineUnreadable(f)
@@ -397,48 +504,39 @@ object MediaStore {
         }
     }
 
+    @Synchronized
     private fun save() {
         val f = mediaFile ?: return
+        _version.value++
         if (writesBlocked) {
             CaptureLog.add("media: save skipped, file was left unreadable")
             return
         }
-        runCatching {
-            val arr = JSONArray()
-            items.forEach { m ->
-                arr.put(
-                    JSONObject().apply {
-                        put("id", m.id)
-                        put("spaceId", m.spaceId)
-                        put("noteIds", JSONArray(m.noteIds))
-                        put("file", m.file)
-                        put("thumb", m.thumb)
-                        put("caption", m.caption)
-                        put("addedAt", m.addedAt)
-                        put("width", m.width)
-                        put("height", m.height)
-                        put("bytes", m.bytes)
-                        put("sha256", m.sha256)
-                        put("ocrText", m.ocrText)
-                        put("ocrScanned", m.ocrScanned)
-                    }
-                )
-            }
-            writeAtomic(f, arr.toString())
-        }.onFailure { CaptureLog.add("media: save failed - ${it.message}") }
-    }
-
-    private fun writeAtomic(target: File, text: String) {
-        val dir = target.parentFile
-        if (dir == null) {
-            target.writeText(text)
-            return
-        }
-        val tmp = File(dir, target.name + ".tmp")
-        tmp.writeText(text)
-        if (!tmp.renameTo(target)) {
-            target.writeText(text)
-            tmp.delete()
+        val snapshot = items.toList()
+        StoreIo.executor.execute {
+            runCatching {
+                val arr = JSONArray()
+                snapshot.forEach { m ->
+                    arr.put(
+                        JSONObject().apply {
+                            put("id", m.id)
+                            put("spaceId", m.spaceId)
+                            put("noteIds", JSONArray(m.noteIds))
+                            put("file", m.file)
+                            put("thumb", m.thumb)
+                            put("caption", m.caption)
+                            put("addedAt", m.addedAt)
+                            put("width", m.width)
+                            put("height", m.height)
+                            put("bytes", m.bytes)
+                            put("sha256", m.sha256)
+                            put("ocrText", m.ocrText)
+                            put("ocrScanned", m.ocrScanned)
+                        }
+                    )
+                }
+                StoreIo.writeAtomic(f, arr.toString())
+            }.onFailure { CaptureLog.add("media: save failed - ${it.message}") }
         }
     }
 }

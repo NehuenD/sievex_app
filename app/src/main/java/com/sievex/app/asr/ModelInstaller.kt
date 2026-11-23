@@ -48,6 +48,12 @@ object ModelInstaller {
     )
 
     private val TOTAL_BYTES = FILES.sumOf { it.bytes }
+    val totalMb: Long = TOTAL_BYTES / (1024 * 1024)
+
+    @Volatile
+    private var cancelRequested = false
+
+    private class CancelledDownloadException : IOException("Download cancelled")
 
     var installed by mutableStateOf(false)
         private set
@@ -83,10 +89,30 @@ object ModelInstaller {
         }
     }
 
+    fun cancel() {
+        if (busy) cancelRequested = true
+    }
+
+    /** Removes installed model files cleanly. Must be called from a background IO thread. */
+    fun deleteInstalled(context: Context) {
+        if (busy) return
+        val app = context.applicationContext
+        AsrEngine.unload()
+        val target = AsrEngine.modelDir(app.filesDir)
+        FILES.forEach { File(target, it.name).delete() }
+        val temp = File(app.filesDir, "models/download")
+        FILES.forEach { File(temp, it.name + ".part").delete() }
+        failed = false
+        progress = 0f
+        refresh(app)
+        captureLog("model: deleted speech model")
+    }
+
     fun download(context: Context) {
         if (busy) return
         busy = true
         failed = false
+        cancelRequested = false
         progress = 0f
         status = context.getString(R.string.sys_model_starting_download)
 
@@ -106,12 +132,19 @@ object ModelInstaller {
                     }
 
                     val part = File(temp, spec.name + ".part")
-                    status = app.getString(R.string.sys_asr_status_downloading, spec.name)
-                    captureLog("model: ${spec.name} from ${part.length()} bytes")
-
-                    fetch(spec, part, doneBytes)
+                    if (part.length() > spec.bytes) {
+                        part.delete()
+                    }
+                    if (part.length() < spec.bytes) {
+                        status = app.getString(R.string.sys_asr_status_downloading, spec.name)
+                        captureLog("model: ${spec.name} from ${part.length()} bytes")
+                        fetch(spec, part, doneBytes)
+                    } else {
+                        captureLog("model: ${spec.name} already at ${part.length()} bytes, verifying")
+                    }
 
                     if (part.length() != spec.bytes) {
+                        if (part.length() > spec.bytes) part.delete()
                         throw IOException("${spec.name}: size ${part.length()} != ${spec.bytes}")
                     }
                     status = app.getString(R.string.sys_asr_status_verifying, spec.name)
@@ -146,6 +179,10 @@ object ModelInstaller {
                 // A job may have been held for this model while it downloaded: drain it now so
                 // the note appears without the user touching anything.
                 if (installed) CaptureService.kick(app)
+            } catch (_: CancelledDownloadException) {
+                failed = false
+                status = app.getString(R.string.sys_asr_status_not_installed)
+                captureLog("model: download cancelled")
             } catch (t: Throwable) {
                 failed = true
                 status = app.getString(R.string.sys_model_download_failed, t.message)
@@ -156,7 +193,7 @@ object ModelInstaller {
         }.start()
     }
 
-    private fun fetch(spec: Spec, part: File, doneBytes: Long) {
+    private fun fetch(spec: Spec, part: File, doneBytes: Long, allowReset: Boolean = true) {
         val url = URL("$BASE/${spec.name}")
         val conn = url.openConnection() as HttpURLConnection
         conn.instanceFollowRedirects = true
@@ -167,35 +204,45 @@ object ModelInstaller {
         var have = if (part.exists()) part.length() else 0L
         if (have > 0) conn.setRequestProperty("Range", "bytes=$have-")
 
+        var retryFromZero = false
         try {
             val code = conn.responseCode
-            if (code != HttpURLConnection.HTTP_OK && code != HttpURLConnection.HTTP_PARTIAL) {
-                throw IOException("HTTP $code for ${spec.name}")
-            }
-
-            val raf = RandomAccessFile(part, "rw")
-            if (code == HttpURLConnection.HTTP_OK) {
-                // Server ignored the range request; start over.
-                have = 0L
-                raf.setLength(0)
+            if (code == 416 && allowReset) {
+                part.delete()
+                retryFromZero = true
             } else {
-                raf.seek(have)
-            }
+                if (code != HttpURLConnection.HTTP_OK && code != HttpURLConnection.HTTP_PARTIAL) {
+                    throw IOException("HTTP $code for ${spec.name}")
+                }
 
-            var written = have
-            conn.inputStream.use { input ->
-                val buffer = ByteArray(256 * 1024)
-                while (true) {
-                    val n = input.read(buffer)
-                    if (n <= 0) break
-                    raf.write(buffer, 0, n)
-                    written += n
-                    progress = ((doneBytes + written).toFloat() / TOTAL_BYTES).coerceIn(0f, 1f)
+                RandomAccessFile(part, "rw").use { raf ->
+                    if (code == HttpURLConnection.HTTP_OK) {
+                        // Server ignored the range request; start over.
+                        have = 0L
+                        raf.setLength(0)
+                    } else {
+                        raf.seek(have)
+                    }
+
+                    var written = have
+                    conn.inputStream.use { input ->
+                        val buffer = ByteArray(256 * 1024)
+                        while (true) {
+                            if (cancelRequested) throw CancelledDownloadException()
+                            val n = input.read(buffer)
+                            if (n <= 0) break
+                            raf.write(buffer, 0, n)
+                            written += n
+                            progress = ((doneBytes + written).toFloat() / TOTAL_BYTES).coerceIn(0f, 1f)
+                        }
+                    }
                 }
             }
-            raf.close()
         } finally {
             conn.disconnect()
+        }
+        if (retryFromZero) {
+            fetch(spec, part, doneBytes, allowReset = false)
         }
     }
 

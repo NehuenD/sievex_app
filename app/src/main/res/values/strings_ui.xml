@@ -23,6 +23,20 @@
     <string name="ui_action_on">On</string>
     <string name="ui_action_off">Off</string>
     <string name="ui_action_stop">Stop</string>
+    <string name="ui_action_close">Close</string>
+    <string name="ui_action_dismiss">Dismiss</string>
+    <string name="ui_action_retry">Retry</string>
+    <string name="ui_action_delete">Delete</string>
+    <string name="ui_action_clear">Clear</string>
+    <string name="ui_action_more">More options</string>
+    <string name="ui_action_undo">Undo</string>
+    <string name="ui_discard_title">Discard unsaved changes?</string>
+    <string name="ui_discard_body">Your edits haven\'t been saved yet.</string>
+    <string name="ui_discard_confirm">Discard</string>
+    <string name="ui_keep_editing">Keep editing</string>
+    <string name="ui_mic_permission_denied">Microphone permission is needed to record.</string>
+    <string name="ui_open_settings">Settings</string>
+    <string name="ui_copied_toast">Copied to clipboard</string>
 
     <!-- Spaces: name, pick, delete, edit -->
     <string name="ui_space_new">New space</string>
@@ -175,6 +189,7 @@
     <string name="ui_lens_none_body">A lens is one way of reading every note in this space: it picks the headings, reads the notes, and can be regenerated any time.</string>
     <string name="ui_lens_empty_title">NO %1$s YET</string>
     <string name="ui_lens_empty_body">It reads every note in this space and cites the ones it used. Nothing is written until you generate it.</string>
+    <string name="ui_lens_from_notes_one">from 1 note · %1$s</string>
     <string name="ui_lens_from_notes">from %1$d notes · %2$s</string>
     <string name="ui_lens_show_action">Show %1$s</string>
     <string name="ui_lens_remove_action">Remove %1$s from this space</string>
@@ -195,6 +210,7 @@
     <string name="ui_placeholder_lens_sections">What could go wrong, Early signals, Mitigations</string>
 
     <!-- Actions screen -->
+    <string name="ui_actions_pending_one">1 pending</string>
     <string name="ui_actions_pending">%1$d pending</string>
     <string name="ui_actions_empty">Nothing pending. Action-mode captures land here.</string>
 
@@ -242,4 +258,161 @@
     <string name="ui_share_mic_needed">Microphone permission is needed to record — saved image instead.</string>
     <string name="ui_media_ocr_label">Extracted text</string>
     <string name="ui_media_ocr_copy">Copy text</string>
+    <string name="ui_media_missing">Image unavailable</string>
+    <string name="ui_media_ocr_scanning">Scanning text…</string>
+    <string name="ui_media_ocr_none">No text found</string>
+    <string name="ui_media_save_failed">Could not save changes.</string>
+    <string name="ui_media_share_failed">Could not share image.</string>
+    <string name="ui_media_zoom_reset">Reset %1$s</string>
+    <string name="ui_share_new_space_chip">+ New space</string>
+    <string name="ui_share_save_error">Could not save images. Please try again.</string>
+    <string name="ui_share_partial_failed">Saved %1$d of %2$d images.</string>
+
+    <!-- Added UX remediation strings -->
+    <string name="ui_record_processing">Processing burst…</string>
+    <string name="ui_record_cancel">Discard</string>
+    <string name="ui_record_use_plain">Use Plain mode instead</string>
+    <string name="ui_record_wifi_hint">Wi-Fi recommended.</string>
+    <string name="ui_record_notif_hint">Enable notification access to capture when pausing a podcast.</string>
+    <string name="ui_notes_search_placeholder">Search notes, screenshots (OCR), reports…</string>
+    <string name="ui_notes_filter_all">All</string>
+    <string name="ui_notes_filter_empty">No notes match this filter.</string>
+    <string name="ui_note_delete_title">Delete note?</string>
+    <string name="ui_note_delete_body">This permanently removes the note and its audio recording.</string>
+    <string name="ui_note_delete_confirm">Delete note</string>
+    <string name="ui_note_share">Share note</string>
+    <string name="ui_note_audio_label">RECORDING</string>
+    <string name="ui_note_audio_play">Play</string>
+    <string name="ui_note_audio_stop">Stop</string>
+    <string name="ui_reprocess_edited_warning">You edited this note by hand. Reprocessing will replace your edited title, summary, insight, and tags.</string>
+    <string name="ui_reprocess_missing_model">Install the language model in Settings to use this format.</string>
+    <string name="ui_editor_more_details">Details &amp; insights</string>
+    <string name="ui_editor_needs_content">Add a title, transcript, or item before saving.</string>
+    <string name="ui_new_note_ai_failed_toast">AI shaping unavailable — saved as Plain text.</string>
+    <string name="ui_actions_mark_done">Mark action completed</string>
+    <string name="ui_actions_completed_header">Completed (%1$d)</string>
+    <string name="ui_actions_completed_toast">Action completed</string>
+    <string name="ui_actions_reopened_toast">Action reopened</string>
+    <string name="ui_settings_permissions">PERMISSIONS</string>
+    <string name="ui_settings_notif_access">Podcast pause detection</string>
+    <string name="ui_settings_mic_access">Microphone</string>
+    <string name="ui_settings_post_notifs">Notifications</string>
+    <string name="ui_settings_granted">Granted</string>
+    <string name="ui_settings_needed">Enable</string>
+    <string name="ui_settings_download_llm">Download language model (1.1 GB)</string>
+    <string name="ui_settings_model_delete_title">Delete %1$s?</string>
+    <string name="ui_settings_model_delete_body">Frees %1$d MB of storage. You can re-download it later.</string>
+    <string name="ui_settings_diagnostics">Diagnostics</string>
+    <string name="ui_space_duplicate_warning">A space with this name already exists.</string>
+    <string name="ui_space_importing_media">Importing images…</string>
+    <string name="ui_space_import_partial_failed">Some images could not be imported.</string>
+    <string name="ui_lens_custom_edit_title">Edit custom lens</string>
+    <string name="ui_lens_edit">Edit lens</string>
+    <string name="ui_lens_custom_required_hint">Name and instruction are required.</string>
+    <string name="ui_lens_delete_confirm_title">Permanently delete \"%1$s\"?</string>
+    <string name="ui_lens_delete_confirm_body">This removes the custom lens from every space and deletes all of its saved reports.</string>
+
+    <!-- Ambient canvas record screen -->
+    <string name="ui_record_filing_into">FILING INTO</string>
+    <string name="ui_record_space_inbox">Inbox</string>
+    <string name="ui_record_space_selector_desc">Filing into %1$s. Tap to change space.</string>
+    <string name="ui_record_tap_to_speak">Tap to speak</string>
+    <string name="ui_record_podcast_short">Podcast</string>
+    <string name="ui_record_podcast_armed_short">Armed</string>
+    <string name="ui_record_notif_short">Enable notification access for podcast pause</string>
+
+    <!-- Unified search (Notes + OCR + Lens Reports) -->
+    <string name="ui_search_scope_all">All (%1$d)</string>
+    <string name="ui_search_scope_notes">Notes (%1$d)</string>
+    <string name="ui_search_scope_media">Screenshots (%1$d)</string>
+    <string name="ui_search_scope_reports">Reports (%1$d)</string>
+    <string name="ui_search_section_media">Screenshots &amp; OCR</string>
+    <string name="ui_search_section_reports">Lens reports</string>
+    <string name="ui_search_screenshot_badge">Screenshot</string>
+
+    <!-- Resurface & Open Questions -->
+    <string name="ui_resurface_header">Remember &amp; chase</string>
+    <string name="ui_resurface_next">Next</string>
+    <string name="ui_resurface_question_kicker">Open question</string>
+    <string name="ui_resurface_memory_kicker">From your notes</string>
+    <string name="ui_resurface_screenshot_kicker">Saved screenshot</string>
+    <string name="ui_question_resolve">Resolve</string>
+    <string name="ui_actions_tab_questions">Questions</string>
+    <string name="ui_actions_tab_reminders">Reminders</string>
+    <string name="ui_questions_count_one">1 open question to chase</string>
+    <string name="ui_questions_count_many">%1$d open questions to chase</string>
+    <string name="ui_questions_empty">No unanswered open questions right now.</string>
+
+    <!-- Follow-up voice thread -->
+    <string name="ui_followup_section_title">Follow-ups</string>
+    <string name="ui_followup_count_one">+1 follow-up</string>
+    <string name="ui_followup_count_many">+%1$d follow-ups</string>
+    <string name="ui_followup_add_voice">Add voice follow-up</string>
+    <string name="ui_followup_add_hint">Append to thread</string>
+    <string name="ui_followup_recording">Recording follow-up</string>
+    <string name="ui_followup_stop_save">Stop &amp; append</string>
+
+    <!-- Screenshot-to-Note & Media voice note -->
+    <string name="ui_media_shape_note">Shape into Note</string>
+    <string name="ui_media_voice_note">Voice note</string>
+    <string name="ui_media_shaping_note">Shaping OCR into a structured note…</string>
+    <string name="ui_media_shaped_toast">Created note from screenshot</string>
+    <string name="ui_media_shape_dialog_title">Shape screenshot into a note</string>
+    <string name="ui_media_shape_dialog_body">Turns the OCR text and caption into a structured note linked to this screenshot.</string>
+    <string name="ui_media_shape_dialog_plain_body">Saves the OCR text and caption as a plain note linked to this screenshot.</string>
+    <string name="ui_media_shape_confirm">Create note</string>
+
+    <!-- Share text clips & auto-shape OCR -->
+    <string name="ui_share_also_shape_ocr">Also shape OCR text into a Note</string>
+    <string name="ui_share_shaping_background">Saved · shaping OCR note in background</string>
+    <string name="ui_share_text_title">Save clip to Sievex</string>
+    <string name="ui_share_text_subtitle">Highlight, URL, or quote</string>
+    <string name="ui_share_text_clip_label">Clipped text</string>
+    <string name="ui_share_text_clip_hint">Shared text or link</string>
+    <string name="ui_share_text_reaction_label">Your take (optional)</string>
+    <string name="ui_share_text_reaction_hint">Why does this matter?</string>
+    <string name="ui_share_text_saved">Clip saved to Notes</string>
+    <string name="ui_space_add_clip">Add clip</string>
+    <string name="ui_clip_paste_clipboard">Paste</string>
+    <string name="ui_clip_clipboard_empty">Clipboard is empty</string>
+
+    <!-- Local Reminders -->
+    <string name="ui_reminder_dialog_title">Set local reminder</string>
+    <string name="ui_reminder_tomorrow">Tomorrow</string>
+    <string name="ui_reminder_preset_2h">In 2 hours</string>
+    <string name="ui_reminder_preset_tonight">Tonight (20:00)</string>
+    <string name="ui_reminder_preset_tomorrow">Tomorrow morning (09:00)</string>
+    <string name="ui_reminder_preset_week">Next week (09:00)</string>
+    <string name="ui_reminder_scheduled_for">Reminder: %1$s</string>
+    <string name="ui_reminder_chip_set">Remind me</string>
+    <string name="ui_reminder_chip_active">Remind · %1$s</string>
+    <string name="ui_reminder_action_set">Set</string>
+    <string name="ui_reminder_short">Remind</string>
+    <string name="ui_reminder_clear">Clear</string>
+    <string name="ui_reminder_saved_toast">Reminder scheduled</string>
+    <string name="ui_reminder_cleared_toast">Reminder cleared</string>
+    <string name="ui_reminders_count_one">1 scheduled reminder</string>
+    <string name="ui_reminders_count_many">%1$d scheduled reminders</string>
+    <string name="ui_reminders_empty">No active reminders. Tap Remind on any Action, Note, or Screenshot.</string>
+
+    <!-- Space AI Focus, decluttered space/media actions & Question drafts -->
+    <string name="ui_section_focus_prompt">AI FOCUS PROMPT</string>
+    <string name="ui_placeholder_space_focus">Optional: steer insights and questions (e.g., mathematical links, intersections across notes)</string>
+    <string name="ui_space_focus_hint">Guides Space insights and follow-up question drafts for notes in this space.</string>
+    <string name="ui_space_focus_title">AI focus prompt</string>
+    <string name="ui_space_focus_badge">AI FOCUS</string>
+    <string name="ui_space_focus_add">+ Add AI focus prompt</string>
+    <string name="ui_space_focus_add_hint">Guide insights &amp; question drafts</string>
+    <string name="ui_space_add_to_space">Add to space</string>
+    <string name="ui_media_edit_caption">Edit caption</string>
+    <string name="ui_note_set_reminder">Set reminder</string>
+    <string name="ui_note_change_reminder">Change reminder</string>
+    <string name="ui_questions_drafts_section">Drafts to review</string>
+    <string name="ui_questions_open_section">Open questions</string>
+    <string name="ui_question_keep">Keep</string>
+    <string name="ui_question_discard">Discard</string>
+    <string name="ui_question_discard_all">Dismiss all</string>
+    <string name="ui_questions_subtitle_draft_one">1 draft to review</string>
+    <string name="ui_questions_subtitle_drafts_only">%1$d drafts to review</string>
+    <string name="ui_questions_subtitle_mixed">%1$d open · %2$d drafts to review</string>
 </resources>
