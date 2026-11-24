@@ -69,15 +69,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -541,10 +542,9 @@ internal fun NotesScreen(
                             .padding(horizontal = 28.dp, vertical = 36.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.art_onboard_1),
+                        EditorialArtwork(
+                            resId = R.drawable.art_onboard_1,
                             contentDescription = null,
-                            contentScale = ContentScale.Fit,
                             modifier = Modifier.size(120.dp)
                         )
                         Spacer(Modifier.height(14.dp))
@@ -749,10 +749,23 @@ private fun DeskSpaceSpineCard(
                     .fillMaxHeight()
                     .background(spineColor)
             )
+            Box(
+                Modifier
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(Ink.copy(alpha = if (IsDarkTheme) 0.08f else 0.06f))
+            )
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
+                    .let { base ->
+                        if (IsDarkTheme) {
+                            base.background(Brush.horizontalGradient(listOf(spineColor.copy(alpha = 0.09f), Color.Transparent)))
+                        } else {
+                            base
+                        }
+                    }
                     .padding(horizontal = 10.dp, vertical = 9.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
@@ -1187,6 +1200,7 @@ internal fun NoteDetailScreen(
     onStopFollowUp: () -> Unit = {},
     onCancelFollowUp: () -> Unit = {},
     onResolveQuestion: (String) -> Unit = {},
+    onToggleStep: (Int) -> Unit = {},
     onOpenMedia: (MediaItem) -> Unit,
     onTagClick: (String) -> Unit,
     onBack: () -> Unit,
@@ -1240,13 +1254,18 @@ internal fun NoteDetailScreen(
         reanalyzing = true
         scope.launch(Dispatchers.IO) {
             val stored = NoteStore.byId(note.id)
+            val hasFollowUps = stored?.followUps?.any { it.text.isNotBlank() } == true
             val combinedSource = stored?.let { s ->
-                buildString {
-                    if (s.verbatim.isNotBlank()) append(s.verbatim.trim())
-                    s.followUps.forEach { fu ->
-                        if (fu.text.isNotBlank()) {
+                if (!hasFollowUps) {
+                    s.verbatim.trim()
+                } else {
+                    buildString {
+                        if (s.verbatim.isNotBlank()) {
+                            append("Original:\n").append(s.verbatim.trim())
+                        }
+                        s.followUps.filter { it.text.isNotBlank() }.forEachIndexed { idx, fu ->
                             if (isNotEmpty()) append("\n\n")
-                            append(fu.text.trim())
+                            append("Follow-up ").append(idx + 1).append(":\n").append(fu.text.trim())
                         }
                     }
                 }
@@ -1259,13 +1278,19 @@ internal fun NoteDetailScreen(
                 return@launch
             }
             val (spaceNameForPrompt, spaceFocus) = SpaceStore.focusFor(stored.spaceId)
+            val inputKind = when {
+                hasFollowUps -> Transform.InputKind.FOLLOW_UP_THREAD
+                stored.audioPath != null -> Transform.InputKind.VOICE
+                else -> Transform.InputKind.TYPED
+            }
             val structured = Transform.apply(
                 context.filesDir,
                 combinedSource,
                 chosen,
                 AppLocale.modelLanguage(context),
                 spaceName = spaceNameForPrompt,
-                spaceFocus = spaceFocus
+                spaceFocus = spaceFocus,
+                inputKind = inputKind
             )
             if (structured == null) {
                 withContext(Dispatchers.Main) {
@@ -1474,7 +1499,9 @@ internal fun NoteDetailScreen(
                 }
                 Spacer(Modifier.height(14.dp))
                 Text(note.title, style = MaterialTheme.typography.headlineMedium, color = Ink)
-                if (note.oneLine.isNotBlank()) {
+                val isLegacyItemCount = note.items.isNotEmpty() &&
+                    Regex("^\\d+ (?:items|steps)$").matches(note.oneLine.trim())
+                if (note.oneLine.isNotBlank() && !isLegacyItemCount) {
                     Spacer(Modifier.height(10.dp))
                     LinkifiedText(
                         text = note.oneLine,
@@ -1524,17 +1551,45 @@ internal fun NoteDetailScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         note.items.forEachIndexed { index, item ->
                             val links = remember(item) { linkRanges(item) }
+                            val stepDone = noteFormat.ordered && index in note.completedSteps
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    if (noteFormat.ordered) "${index + 1}." else "•",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = EditorialMono),
-                                    color = SignalText,
-                                    modifier = Modifier.width(24.dp)
-                                )
+                                if (noteFormat.ordered) {
+                                    Surface(
+                                        onClick = { onToggleStep(index) },
+                                        color = if (stepDone) MintSoft else Surface2,
+                                        shape = CircleShape,
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (stepDone) Mint.copy(alpha = 0.65f) else Line
+                                        ),
+                                        modifier = Modifier.size(40.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                text = if (stepDone) "\u2713" else "${index + 1}",
+                                                style = MaterialTheme.typography.labelMedium.copy(
+                                                    fontFamily = EditorialMono,
+                                                    fontWeight = FontWeight.Bold
+                                                ),
+                                                color = if (stepDone) Mint else SignalText
+                                            )
+                                        }
+                                    }
+                                    Spacer(Modifier.width(10.dp))
+                                } else {
+                                    Text(
+                                        "•",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = EditorialMono),
+                                        color = SignalText,
+                                        modifier = Modifier.width(24.dp)
+                                    )
+                                }
                                 LinkifiedText(
                                     text = item,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Ink,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        textDecoration = if (stepDone) TextDecoration.LineThrough else TextDecoration.None
+                                    ),
+                                    color = if (stepDone) Ink2 else Ink,
                                     modifier = Modifier.weight(1f),
                                     precomputedRanges = links
                                 )
@@ -2378,7 +2433,8 @@ internal fun NewNoteScreen(
                     chosen,
                     AppLocale.modelLanguage(context),
                     spaceName = spaceNameForPrompt,
-                    spaceFocus = spaceFocus
+                    spaceFocus = spaceFocus,
+                    inputKind = Transform.InputKind.TYPED
                 )
             } else {
                 null

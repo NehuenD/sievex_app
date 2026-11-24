@@ -16,7 +16,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -65,9 +64,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -426,14 +423,14 @@ internal fun FullFocusCaptureSheet(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.56f))
+            .background(Color.Black.copy(alpha = ScrimAlpha))
             .clickable { onDismiss() },
         contentAlignment = Alignment.BottomCenter
     ) {
         Surface(
-            color = Canvas,
+            color = if (IsDarkTheme) Surface1 else Canvas,
             shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-            border = BorderStroke(1.dp, Line),
+            border = BorderStroke(1.dp, LineStrong),
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(enabled = false) {}
@@ -648,9 +645,9 @@ internal fun FullFocusCaptureSheet(
 
                 // Hero plate: editorial artwork (when idle) + waveform + timer + record control
                 Surface(
-                    color = Surface1,
+                    color = if (IsDarkTheme) Surface2 else Surface1,
                     shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, if (recording) Signal.copy(alpha = 0.55f) else Line),
+                    border = BorderStroke(1.dp, if (recording) Signal.copy(alpha = 0.60f) else Line),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp)
@@ -662,10 +659,9 @@ internal fun FullFocusCaptureSheet(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         if (!recording && Pipeline.stage == PipelineStage.IDLE) {
-                            Image(
-                                painter = painterResource(id = R.drawable.art_onboard_1),
+                            EditorialArtwork(
+                                resId = R.drawable.art_onboard_1,
                                 contentDescription = stringResource(R.string.ui_capture_sheet_title),
-                                contentScale = ContentScale.Fit,
                                 modifier = Modifier
                                     .size(96.dp)
                                     .padding(bottom = 8.dp)
@@ -968,7 +964,7 @@ private fun EditorialInkWaveform(
         recording -> Signal
         stage == PipelineStage.TRANSCRIBING -> Blue
         stage == PipelineStage.TRANSFORMING -> Mint
-        else -> Ink2.copy(alpha = 0.45f)
+        else -> Ink2.copy(alpha = if (IsDarkTheme) 0.55f else 0.45f)
     }
     val ruleColor = Line
 
@@ -1072,6 +1068,7 @@ internal fun pipelineStepLabel(step: PipelineStep?): String = when (step) {
     PipelineStep.ITEMS -> stringResource(R.string.step_items)
     PipelineStep.STEPS -> stringResource(R.string.step_steps)
     PipelineStep.INSIGHTS -> stringResource(R.string.step_insights)
+    PipelineStep.QUESTIONS -> stringResource(R.string.step_questions)
     PipelineStep.TAGS -> stringResource(R.string.step_tags)
     PipelineStep.SAVING -> stringResource(R.string.step_saving)
     PipelineStep.INTENT, null -> stringResource(R.string.step_intent)

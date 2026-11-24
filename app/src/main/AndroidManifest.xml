@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- Network is used once, to fetch the two model files. Recordings and notes never leave. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Keep large model downloads running when the screen is locked. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Reschedule local reminders cleanly after a device reboot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
@@ -72,6 +74,12 @@
         <!-- dataSync: the report is built by a blocking model pass over saved notes. -->
         <service
             android:name=".LensService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- dataSync: keeps large on-device model downloads alive while the screen is locked. -->
+        <service
+            android:name=".ModelDownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 

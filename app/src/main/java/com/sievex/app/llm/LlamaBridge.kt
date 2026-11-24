@@ -14,8 +14,9 @@ object LlamaBridge {
 
     /**
      * Coarse checkpoints during one generation, reported from the native decode loop as the
-     * grammar-pinned field keys appear. 1 = intent, 2 = title, 3 = summary, 4 = insights,
-     * 5 = tags. The UI only uses them for label text; a missed phase costs nothing.
+     * grammar-pinned field keys appear. 1 = start (`one_line` / `items`), 2 = `mode`,
+     * 3 = `title`, 4 = `why_it_matters`, 5 = `question_drafts`, 6 = `tags`. The UI only uses
+     * them for label text; a missed phase costs nothing.
      */
     fun interface TransformProgress {
         fun onPhase(phase: Int)

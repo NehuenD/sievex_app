@@ -6,7 +6,6 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -63,11 +62,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -166,10 +164,9 @@ internal fun SpacesScreen(
                         .padding(vertical = 32.dp, horizontal = 12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.art_onboard_2),
+                    EditorialArtwork(
+                        resId = R.drawable.art_onboard_2,
                         contentDescription = null,
-                        contentScale = ContentScale.Fit,
                         modifier = Modifier.size(120.dp)
                     )
                     Spacer(Modifier.height(14.dp))
@@ -236,17 +233,30 @@ private fun SpaceBookCoverCard(
             )
     ) {
         Row(Modifier.fillMaxSize()) {
-            // Crisp 6dp left colored book-spine edge band
+            // Crisp 6dp left colored book-spine edge band + engraved book crease
             Box(
                 Modifier
                     .width(6.dp)
                     .fillMaxHeight()
                     .background(spineColor)
             )
+            Box(
+                Modifier
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(Ink.copy(alpha = if (IsDarkTheme) 0.08f else 0.06f))
+            )
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
+                    .let { base ->
+                        if (IsDarkTheme) {
+                            base.background(Brush.horizontalGradient(listOf(spineColor.copy(alpha = 0.10f), Color.Transparent)))
+                        } else {
+                            base
+                        }
+                    }
                     .padding(start = 12.dp, end = 6.dp, top = 10.dp, bottom = 12.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
@@ -2042,7 +2052,8 @@ private fun AddClipToSpaceDialog(
                                     fmt,
                                     AppLocale.modelLanguage(context),
                                     spaceName = spaceName,
-                                    spaceFocus = spaceFocus
+                                    spaceFocus = spaceFocus,
+                                    inputKind = Transform.InputKind.CLIP
                                 )
                                 val time = SimpleDateFormat("HH:mm", Locale.US).format(Date())
                                 val whenText = "Today $time"

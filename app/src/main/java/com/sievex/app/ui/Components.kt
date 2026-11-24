@@ -1,6 +1,8 @@
 package com.sievex.app.ui
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -28,14 +30,23 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -177,6 +188,37 @@ internal fun CloseIconButton(
 }
 
 /**
+ * Hue-preserving luminance inversion for dark mode: maps white paper fills to warm charcoal
+ * and black ink to luminous ivory while retaining terracotta, slate-blue, sage, and brass hues.
+ */
+private val DarkEditorialArtFilter = ColorFilter.colorMatrix(
+    ColorMatrix(
+        floatArrayOf(
+            0.6803f, -1.3446f, -0.1357f, 0f, 237.15f,
+            -0.3997f, -0.2646f, -0.1357f, 0f, 234.60f,
+            -0.3997f, -1.3446f, 0.9443f, 0f, 229.50f,
+            0f, 0f, 0f, 1f, 0f
+        )
+    )
+)
+
+/** Renders editorial spot illustrations naturally in both light paper and dark obsidian themes. */
+@Composable
+internal fun EditorialArtwork(
+    @DrawableRes resId: Int,
+    contentDescription: String?,
+    modifier: Modifier = Modifier
+) {
+    Image(
+        painter = painterResource(id = resId),
+        contentDescription = contentDescription,
+        contentScale = ContentScale.Fit,
+        colorFilter = if (IsDarkTheme) DarkEditorialArtFilter else null,
+        modifier = modifier
+    )
+}
+
+/**
  * Labelled folio-well text field shared across editors, space/lens dialogs, and Share sheet.
  */
 @Composable
@@ -194,12 +236,13 @@ internal fun EditorField(
     imeAction: ImeAction = if (singleLine) ImeAction.Done else ImeAction.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default
 ) {
+    var focused by remember { mutableStateOf(false) }
     Column(modifier = modifier) {
         if (label.isNotEmpty()) {
             Text(
                 text = if (required) "$label *" else label,
                 style = MaterialTheme.typography.labelSmall,
-                color = Ink2
+                color = if (focused) SignalText else Ink2
             )
             Spacer(Modifier.height(8.dp))
         }
@@ -207,13 +250,14 @@ internal fun EditorField(
             .fillMaxWidth()
             .heightIn(min = minHeight)
             .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
+            .onFocusChanged { focused = it.isFocused }
 
         Box(
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
                 .background(Surface2)
-                .border(1.dp, Line, RoundedCornerShape(10.dp))
+                .border(1.dp, if (focused) Signal.copy(alpha = 0.65f) else Line, RoundedCornerShape(10.dp))
                 .alpha(if (enabled) 1f else 0.6f)
                 .padding(horizontal = 14.dp, vertical = 13.dp)
         ) {
@@ -250,7 +294,7 @@ internal fun AppDialogSurface(
         Surface(
             color = Surface1,
             shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, Line),
+            border = BorderStroke(1.dp, LineStrong),
             modifier = modifier.fillMaxWidth()
         ) {
             Column(Modifier.padding(20.dp), content = content)

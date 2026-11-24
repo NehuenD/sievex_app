@@ -11,7 +11,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -50,9 +49,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -247,7 +245,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
     }
 }
 
-/** Framed editorial risograph plate rendering custom transparent artwork cleanly without tinting. */
+/** Framed editorial risograph plate rendering custom artwork adapted cleanly to light or dark mode. */
 @Composable
 private fun OnboardingPlate(step: Int, page: OnboardingStep) {
     val accent = when (step) {
@@ -260,11 +258,26 @@ private fun OnboardingPlate(step: Int, page: OnboardingStep) {
         2 -> MintSoft
         else -> SignalSoft
     }
+    val plateModifier = if (IsDarkTheme) {
+        Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(6.dp))
+            .background(Brush.verticalGradient(listOf(plateTint.copy(alpha = 0.85f), Surface1)))
+            .border(1.dp, accent.copy(alpha = 0.36f), RoundedCornerShape(6.dp))
+            .padding(16.dp)
+    } else {
+        Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(6.dp))
+            .background(plateTint.copy(alpha = 0.55f))
+            .border(1.dp, accent.copy(alpha = 0.28f), RoundedCornerShape(6.dp))
+            .padding(16.dp)
+    }
 
     Surface(
         color = Surface1,
         shape = RoundedCornerShape(10.dp),
-        border = BorderStroke(1.dp, Line),
+        border = BorderStroke(1.dp, if (IsDarkTheme) LineStrong else Line),
         modifier = Modifier
             .fillMaxWidth()
             .height(228.dp)
@@ -276,12 +289,7 @@ private fun OnboardingPlate(step: Int, page: OnboardingStep) {
             contentAlignment = Alignment.Center
         ) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(plateTint.copy(alpha = 0.55f))
-                    .border(1.dp, accent.copy(alpha = 0.28f), RoundedCornerShape(6.dp))
-                    .padding(16.dp),
+                modifier = plateModifier,
                 contentAlignment = Alignment.Center
             ) {
                 AnimatedContent(
@@ -289,10 +297,9 @@ private fun OnboardingPlate(step: Int, page: OnboardingStep) {
                     transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(140)) },
                     label = "onboarding artwork"
                 ) { resId ->
-                    Image(
-                        painter = painterResource(id = resId),
+                    EditorialArtwork(
+                        resId = resId,
                         contentDescription = stringResource(page.heading),
-                        contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize()
                     )
                 }

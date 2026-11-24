@@ -61,6 +61,9 @@ data class FolioPalette(
     val surface1: Color,
     val surface2: Color,
     val line: Color,
+    val lineStrong: Color,
+    val navBar: Color,
+    val scrimAlpha: Float,
     val ink: Color,
     val ink2: Color,
     val placeholderInk: Color,
@@ -86,6 +89,9 @@ private val LightFolioPalette = FolioPalette(
     surface1 = Color(0xFFF2ECE0),
     surface2 = Color(0xFFE8E0CF),
     line = Color(0xFFDED5C4),
+    lineStrong = Color(0xFFDED5C4),
+    navBar = Color(0xFFF2ECE0),
+    scrimAlpha = 0.52f,
     ink = Color(0xFF171512),
     ink2 = Color(0xFF635D54),
     placeholderInk = Color(0xFF9C9486),
@@ -107,27 +113,30 @@ private val LightFolioPalette = FolioPalette(
 
 private val DarkFolioPalette = FolioPalette(
     isDark = true,
-    canvas = Color(0xFF141210),
-    surface1 = Color(0xFF1D1A17),
-    surface2 = Color(0xFF27231E),
-    line = Color(0xFF2F2A24),
-    ink = Color(0xFFF3ECE0),
-    ink2 = Color(0xFFADA496),
-    placeholderInk = Color(0xFF756E63),
-    signal = Color(0xFFEA6C50),
-    signalFill = Color(0xFFEA6C50),
-    signalText = Color(0xFFFFA08A),
-    signalSoft = Color(0xFF331C16),
-    blue = Color(0xFF7AA3D6),
-    blueText = Color(0xFFA1C2EB),
-    blueSoft = Color(0xFF1A2636),
-    mint = Color(0xFF66B298),
-    mintSoft = Color(0xFF182C25),
-    onMint = Color(0xFF08241C),
-    green = Color(0xFF66B298),
-    amber = Color(0xFFE3AD54),
-    red = Color(0xFFF06D5D),
-    redFill = Color(0xFFB83A2C)
+    canvas = Color(0xFF0F0F0E),
+    surface1 = Color(0xFF181716),
+    surface2 = Color(0xFF22211F),
+    line = Color(0xFF33312E),
+    lineStrong = Color(0xFF423F3B),
+    navBar = Color(0xFF141312),
+    scrimAlpha = 0.74f,
+    ink = Color(0xFFF3EEE5),
+    ink2 = Color(0xFFA8A196),
+    placeholderInk = Color(0xFF706B63),
+    signal = Color(0xFFEB7559),
+    signalFill = Color(0xFFC44A2F),
+    signalText = Color(0xFFF59A82),
+    signalSoft = Color(0xFF2C1B17),
+    blue = Color(0xFF7FA8DB),
+    blueText = Color(0xFFA6C8F0),
+    blueSoft = Color(0xFF172435),
+    mint = Color(0xFF6BC0A2),
+    mintSoft = Color(0xFF142922),
+    onMint = Color(0xFF071E16),
+    green = Color(0xFF6BC0A2),
+    amber = Color(0xFFE7B860),
+    red = Color(0xFFF27465),
+    redFill = Color(0xFFB8392B)
 )
 
 val LocalFolioPalette = staticCompositionLocalOf { DarkFolioPalette }
@@ -137,6 +146,9 @@ val Canvas: Color @Composable @ReadOnlyComposable get() = LocalFolioPalette.curr
 val Surface1: Color @Composable @ReadOnlyComposable get() = LocalFolioPalette.current.surface1
 val Surface2: Color @Composable @ReadOnlyComposable get() = LocalFolioPalette.current.surface2
 val Line: Color @Composable @ReadOnlyComposable get() = LocalFolioPalette.current.line
+val LineStrong: Color @Composable @ReadOnlyComposable get() = LocalFolioPalette.current.lineStrong
+val NavBar: Color @Composable @ReadOnlyComposable get() = LocalFolioPalette.current.navBar
+val ScrimAlpha: Float @Composable @ReadOnlyComposable get() = LocalFolioPalette.current.scrimAlpha
 val Ink: Color @Composable @ReadOnlyComposable get() = LocalFolioPalette.current.ink
 val Ink2: Color @Composable @ReadOnlyComposable get() = LocalFolioPalette.current.ink2
 val PlaceholderInk: Color @Composable @ReadOnlyComposable get() = LocalFolioPalette.current.placeholderInk
@@ -255,7 +267,7 @@ fun SievexTheme(
                 @Suppress("DEPRECATION")
                 window.statusBarColor = palette.canvas.toArgb()
                 @Suppress("DEPRECATION")
-                window.navigationBarColor = palette.surface1.toArgb()
+                window.navigationBarColor = palette.navBar.toArgb()
                 WindowCompat.getInsetsController(window, view).apply {
                     isAppearanceLightStatusBars = !dark
                     isAppearanceLightNavigationBars = !dark

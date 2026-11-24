@@ -149,7 +149,8 @@ data class NoteItem(
     val completedAt: Long? = null,
     val followUps: List<NoteFollowUp> = emptyList(),
     val openQuestions: List<String> = emptyList(),
-    val questionDrafts: List<String> = emptyList()
+    val questionDrafts: List<String> = emptyList(),
+    val completedSteps: Set<Int> = emptySet()
 )
 
 internal data class UiSnapshot(
@@ -190,7 +191,8 @@ internal fun readSnapshot(): UiSnapshot {
                 completedAt = n.completedAt,
                 followUps = n.followUps,
                 openQuestions = n.resolvedOpenQuestions(),
-                questionDrafts = n.questionDrafts
+                questionDrafts = n.questionDrafts,
+                completedSteps = n.completedSteps
             )
         },
         spaces = allSpaces,
@@ -392,6 +394,8 @@ internal fun ModeChip(mode: String) {
     val c = modeColor(mode)
     Box(
         Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(c.copy(alpha = if (IsDarkTheme) 0.14f else 0.08f))
             .border(1.dp, c.copy(alpha = 0.55f), RoundedCornerShape(4.dp))
             .padding(horizontal = 8.dp, vertical = 3.dp)
     ) {
@@ -893,7 +897,7 @@ fun SievexApp(
                         onQuickRecord = toggleRecording
                     )
                     HorizontalDivider(thickness = 1.dp, color = Line)
-                    NavigationBar(containerColor = Surface1, tonalElevation = 0.dp) {
+                    NavigationBar(containerColor = NavBar, tonalElevation = 0.dp) {
                         NavItem(0, stringResource(R.string.ui_tab_desk), tab, { tab = it }) {
                             DeskTabIcon(selected = tab == 0)
                         }
@@ -1076,7 +1080,8 @@ fun SievexApp(
                                     chosenFormat,
                                     AppLocale.modelLanguage(context),
                                     spaceName = spaceNameForPrompt,
-                                    spaceFocus = spaceFocus
+                                    spaceFocus = spaceFocus,
+                                    inputKind = Transform.InputKind.TYPED
                                 )
                             } else {
                                 null
@@ -1181,6 +1186,15 @@ fun SievexApp(
                         scope.launch {
                             val snapshot = withContext(Dispatchers.IO) {
                                 NoteStore.resolveOpenQuestion(note.id, qText)
+                                readSnapshot()
+                            }
+                            applySnapshot(snapshot)
+                        }
+                    },
+                    onToggleStep = { stepIdx ->
+                        scope.launch {
+                            val snapshot = withContext(Dispatchers.IO) {
+                                NoteStore.toggleStepCompleted(note.id, stepIdx)
                                 readSnapshot()
                             }
                             applySnapshot(snapshot)

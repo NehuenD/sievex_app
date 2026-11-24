@@ -53,11 +53,28 @@
     <!-- Transform model download status (TransformModel.kt) -->
     <string name="sys_llm_status_not_installed">Modelo de lenguaje no instalado</string>
     <string name="sys_llm_status_ready">Modelo de lenguaje listo (%1$d MB)</string>
+    <string name="sys_llm_status_downloading">Descargando modelo de lenguaje (%1$d%%)</string>
 
     <!-- Shared by both model downloaders -->
     <string name="sys_model_starting_download">Iniciando descarga</string>
+    <string name="sys_model_retrying">Conexión interrumpida, reanudando…</string>
     <string name="sys_model_verifying">Verificando</string>
     <string name="sys_model_download_failed">Error en la descarga: %1$s</string>
+
+    <!-- Foreground model download service (ModelDownloadService.kt) -->
+    <string name="sys_download_channel_name">Descargas de modelos</string>
+    <string name="sys_download_channel_description">Mantiene activas las descargas de modelos locales cuando se bloquea la pantalla</string>
+    <string name="sys_download_notif_llm_title">Descargando modelo de lenguaje</string>
+    <string name="sys_download_notif_asr_title">Descargando modelo de transcripción</string>
+    <string name="sys_download_notif_both_title">Descargando modelos locales</string>
+    <string name="sys_download_notif_progress">%1$d%% · Puedes bloquear el teléfono</string>
+    <string name="sys_download_notif_verifying">Verificando descarga…</string>
+    <string name="sys_download_notif_cancel">Cancelar</string>
+    <string name="sys_download_done_llm_title">Modelo de lenguaje listo</string>
+    <string name="sys_download_done_asr_title">Modelo de transcripción listo</string>
+    <string name="sys_download_done_text">Descarga completa. Sievex está listo sin conexión.</string>
+    <string name="sys_download_failed_title">Descarga de modelo en pausa</string>
+    <string name="sys_download_failed_text">Toca para abrir Sievex y reanudar donde quedó.</string>
 
     <!-- Acceso rápido y widget de pantalla de inicio -->
     <string name="sys_tile_label">Capturar</string>

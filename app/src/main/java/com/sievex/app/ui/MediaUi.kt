@@ -354,7 +354,8 @@ internal fun MediaViewerDialog(
                         chosenFormat,
                         AppLocale.modelLanguage(context),
                         spaceName = spaceName,
-                        spaceFocus = spaceFocus
+                        spaceFocus = spaceFocus,
+                        inputKind = Transform.InputKind.OCR
                     )
                 } else {
                     Transform.apply(
@@ -363,7 +364,8 @@ internal fun MediaViewerDialog(
                         NoteFormat.PLAIN,
                         AppLocale.modelLanguage(context),
                         spaceName = spaceName,
-                        spaceFocus = spaceFocus
+                        spaceFocus = spaceFocus,
+                        inputKind = Transform.InputKind.OCR
                     )
                 }
                 val time = SimpleDateFormat("HH:mm", Locale.US).format(Date())

@@ -55,6 +55,8 @@ object Lens {
     private val SPACE_BEFORE_PUNCT_REGEX = Regex("""[ \t]+([;:,.!?])""")
     private val MULTI_SPACE_REGEX = Regex("""[ \t]{2,}""")
 
+    private val LEGACY_ITEM_COUNT_REGEX = Regex("^\\d+ (?:items|steps)$")
+
     /**
      * Runs one LLM pass over [notes] as [spec] reads them, and saves the result as an artifact
      * whose kind is [LensSpec.id].
@@ -152,28 +154,20 @@ object Lens {
     /**
      * The system turn: the lens's own instruction, then the heading list derived from the spec.
      *
-     * The headings are restated from [LensSpec.sections] rather than trusted to the instruction
-     * text, because a custom lens is arbitrary user input that may have forgotten them. When the
-     * instruction already spells out this exact ordered list — every built-in does — the clause
-     * is skipped, so the model is never shown two competing copies of the same outline.
+     * Kept independent of per-space fields (`focusPrompt`, `description`) so the native prefix
+     * cache keys only on `(lensId, language)` and never churns or evicts `Transform` snapshots.
      */
-    private fun systemPrompt(spec: LensSpec, language: String, focusPrompt: String): String {
+    private fun systemPrompt(spec: LensSpec, language: String): String {
         val instruction = sanitizeChatMl(spec.instruction).trim()
         val cleanSections = sections(spec)
         val base = instruction + headingClause(instruction, cleanSections)
-        val focus = flat(focusPrompt, FOCUS_PROMPT_CHARS)
-        val withFocus = if (focus.isNotEmpty()) {
-            base + "\n\nSpace focus (prioritize this angle throughout every section; look for insights, patterns, and connections aligned with it):\n" + focus
-        } else {
-            base
-        }
         // The instructions stay English (they are tuned), the report does not. The heading list
         // above is English too, so Spanish asks for a translation of it, order preserved.
         return if (language == "es") {
-            withFocus + "\n\nWrite the whole report in Spanish, including the section headings: " +
+            base + "\n\nWrite the whole report in Spanish, including the section headings: " +
                 "translate each heading, keep the order and the number of sections, and add none."
         } else {
-            withFocus
+            base
         }
     }
 
@@ -210,7 +204,7 @@ object Lens {
     ): String =
         buildString {
             append("<|im_start|>system\n")
-            append(systemPrompt(spec, language, space.focusPrompt))
+            append(systemPrompt(spec, language))
             append("<|im_end|>\n")
             append("<|im_start|>user\n")
             append("Space: ").append(flat(space.name, TITLE_CHARS).ifBlank { "Untitled space" })
@@ -220,6 +214,11 @@ object Lens {
             val description = flat(space.description, DESCRIPTION_CHARS)
             if (description.isNotEmpty()) {
                 append("About this space: ").append(description).append('\n')
+            }
+            val focus = flat(space.focusPrompt, FOCUS_PROMPT_CHARS)
+            if (focus.isNotEmpty()) {
+                append("Space focus (prioritize this angle throughout every section; look for insights, patterns, and connections aligned with it): ")
+                    .append(focus).append('\n')
             }
 
             append("Notes: ").append(notes.size).append('\n')
@@ -294,7 +293,8 @@ object Lens {
         append("mode: ").append(flat(note.mode, 40).ifBlank { "Insight" }).append('\n')
 
         val oneLine = flat(note.oneLine, ONE_LINE_CHARS)
-        if (oneLine.isNotEmpty()) append("one_line: ").append(oneLine).append('\n')
+        val isLegacyCount = note.items.isNotEmpty() && LEGACY_ITEM_COUNT_REGEX.matches(oneLine)
+        if (oneLine.isNotEmpty() && !isLegacyCount) append("one_line: ").append(oneLine).append('\n')
 
         // A list note's one_line is only a count, so the actual items have to travel too.
         if (note.items.isNotEmpty()) {

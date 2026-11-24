@@ -46,6 +46,7 @@
     <string name="step_items">Extracting items</string>
     <string name="step_steps">Ordering the steps</string>
     <string name="step_insights">Creating insights</string>
+    <string name="step_questions">Drafting questions</string>
     <string name="step_tags">Adding tags</string>
     <string name="step_saving">Saving the note</string>
 

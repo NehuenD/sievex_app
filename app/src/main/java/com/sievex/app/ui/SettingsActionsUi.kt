@@ -3,7 +3,6 @@ package com.sievex.app.ui
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -52,10 +51,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -160,10 +157,9 @@ internal fun ActionsScreen(
                         Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Ink2)
                     }
                     Spacer(Modifier.width(12.dp))
-                    Image(
-                        painter = painterResource(id = R.drawable.art_onboard_3),
+                    EditorialArtwork(
+                        resId = R.drawable.art_onboard_3,
                         contentDescription = null,
-                        contentScale = ContentScale.Fit,
                         modifier = Modifier.size(64.dp)
                     )
                 }
@@ -553,10 +549,9 @@ private fun TriageEmptyPlate(message: String) {
             .padding(horizontal = 28.dp, vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.art_onboard_3),
+        EditorialArtwork(
+            resId = R.drawable.art_onboard_3,
             contentDescription = null,
-            contentScale = ContentScale.Fit,
             modifier = Modifier.size(116.dp)
         )
         Spacer(Modifier.height(14.dp))
@@ -603,6 +598,8 @@ private fun ArchivalIndexCard(
                 ) {
                     Box(
                         Modifier
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(tabColor.copy(alpha = if (IsDarkTheme) 0.14f else 0.07f))
                             .border(1.dp, tabColor.copy(alpha = 0.55f), RoundedCornerShape(3.dp))
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {

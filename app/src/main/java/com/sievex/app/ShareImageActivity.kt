@@ -75,8 +75,10 @@ import com.sievex.app.ui.FormatChips
 import com.sievex.app.ui.Ink
 import com.sievex.app.ui.Ink2
 import com.sievex.app.ui.Line
+import com.sievex.app.ui.LineStrong
 import com.sievex.app.ui.MediaBitmapCache
 import com.sievex.app.ui.PillButton
+import com.sievex.app.ui.ScrimAlpha
 import com.sievex.app.ui.SievexTheme
 import com.sievex.app.ui.Signal
 import com.sievex.app.ui.SignalFill
@@ -214,7 +216,8 @@ class ShareImageActivity : ComponentActivity() {
                         chosen,
                         lang,
                         spaceName = spaceName,
-                        spaceFocus = spaceFocus
+                        spaceFocus = spaceFocus,
+                        inputKind = Transform.InputKind.OCR
                     )
                     val time = SimpleDateFormat("HH:mm", Locale.US).format(Date())
                     val whenText = "Today $time"
@@ -333,7 +336,8 @@ class ShareImageActivity : ComponentActivity() {
             chosenFormat,
             AppLocale.modelLanguage(this),
             spaceName = spaceName,
-            spaceFocus = spaceFocus
+            spaceFocus = spaceFocus,
+            inputKind = Transform.InputKind.CLIP
         )
 
         val noteId = NoteStore.nextId()
@@ -551,7 +555,7 @@ private fun ShareSheet(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.50f))
+            .background(Color.Black.copy(alpha = ScrimAlpha))
             .clickable(enabled = !saving) { onDismiss() },
         contentAlignment = Alignment.BottomCenter
     ) {
@@ -560,7 +564,8 @@ private fun ShareSheet(
                 .fillMaxWidth()
                 .clickable(enabled = false) {},
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-            color = Surface1
+            color = Surface1,
+            border = BorderStroke(1.dp, LineStrong)
         ) {
             Column(
                 modifier = Modifier
@@ -826,7 +831,7 @@ private fun ShareTextSheet(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.50f))
+            .background(Color.Black.copy(alpha = ScrimAlpha))
             .clickable(enabled = !saving) { onDismiss() },
         contentAlignment = Alignment.BottomCenter
     ) {
@@ -835,7 +840,8 @@ private fun ShareTextSheet(
                 .fillMaxWidth()
                 .clickable(enabled = false) {},
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-            color = Surface1
+            color = Surface1,
+            border = BorderStroke(1.dp, LineStrong)
         ) {
             Column(
                 modifier = Modifier

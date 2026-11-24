@@ -54,11 +54,28 @@
     <!-- Transform model download status (TransformModel.kt) -->
     <string name="sys_llm_status_not_installed">Language model not installed</string>
     <string name="sys_llm_status_ready">Language model ready (%1$d MB)</string>
+    <string name="sys_llm_status_downloading">Downloading language model (%1$d%%)</string>
 
     <!-- Shared by both model downloaders -->
     <string name="sys_model_starting_download">Starting download</string>
+    <string name="sys_model_retrying">Connection interrupted, resuming…</string>
     <string name="sys_model_verifying">Verifying</string>
     <string name="sys_model_download_failed">Download failed: %1$s</string>
+
+    <!-- Foreground model download service (ModelDownloadService.kt) -->
+    <string name="sys_download_channel_name">Model downloads</string>
+    <string name="sys_download_channel_description">Keeps large on-device model downloads running while the screen is locked</string>
+    <string name="sys_download_notif_llm_title">Downloading language model</string>
+    <string name="sys_download_notif_asr_title">Downloading transcription model</string>
+    <string name="sys_download_notif_both_title">Downloading on-device models</string>
+    <string name="sys_download_notif_progress">%1$d%% · Safe to lock your phone</string>
+    <string name="sys_download_notif_verifying">Verifying download…</string>
+    <string name="sys_download_notif_cancel">Cancel</string>
+    <string name="sys_download_done_llm_title">Language model ready</string>
+    <string name="sys_download_done_asr_title">Transcription model ready</string>
+    <string name="sys_download_done_text">Download complete. Sievex is ready offline.</string>
+    <string name="sys_download_failed_title">Model download paused</string>
+    <string name="sys_download_failed_text">Tap to open Sievex and resume where it left off.</string>
 
     <!-- Quick Settings tile & home-screen widget -->
     <string name="sys_tile_label">Capture</string>
