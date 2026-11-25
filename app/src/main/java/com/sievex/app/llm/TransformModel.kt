@@ -120,7 +120,7 @@ object TransformModel {
         }
     }
 
-    internal fun abortBeforeStart() {
+    internal fun finishServiceDownload() {
         verifying = false
         retrying = false
         busy = false
@@ -128,11 +128,12 @@ object TransformModel {
     }
 
     internal fun runFallbackThread(appContext: Context) {
-        Thread { executeDownload(appContext) }.start()
+        Thread { executeDownload(appContext, manageInFlight = true) }.start()
     }
 
     internal fun executeDownload(
         context: Context,
+        manageInFlight: Boolean = true,
         onUpdate: () -> Unit = {}
     ): ModelDownloadService.Outcome {
         val app = context.applicationContext
@@ -194,8 +195,10 @@ object TransformModel {
         } finally {
             verifying = false
             retrying = false
-            busy = false
-            inFlight.set(false)
+            if (manageInFlight) {
+                busy = false
+                inFlight.set(false)
+            }
         }
     }
 
@@ -207,6 +210,17 @@ object TransformModel {
             try {
                 retrying = false
                 fetch(part, localized, onUpdate)
+                if (part.length() < BYTES) {
+                    if (part.length() > before) {
+                        stalledAttempts = 0
+                    } else {
+                        stalledAttempts++
+                        if (stalledAttempts > MAX_STALL_RETRIES) {
+                            throw IOException("incomplete transfer at ${part.length()} bytes")
+                        }
+                    }
+                    sleepBeforeRetry(stalledAttempts, part.length(), localized, onUpdate)
+                }
             } catch (c: CancelledDownloadException) {
                 throw c
             } catch (h: HttpStatusException) {
@@ -246,6 +260,9 @@ object TransformModel {
             remaining -= step
         }
         retrying = false
+        val pct = (progress * 100f).toInt().coerceIn(0, 100)
+        status = localized.getString(R.string.sys_llm_status_downloading, pct)
+        onUpdate()
     }
 
     private fun fetch(part: File, localized: Context, onUpdate: () -> Unit, allowReset: Boolean = true) {

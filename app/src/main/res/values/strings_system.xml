@@ -7,12 +7,12 @@
 <resources>
 
     <!-- First-run flow (Onboarding.kt) -->
-    <string name="sys_onboarding_step1_title">Just start talking</string>
-    <string name="sys_onboarding_step1_body">Tap record, speak your mind, and tap again to stop. It becomes a note on its own.</string>
-    <string name="sys_onboarding_step2_title">Nothing leaves this phone</string>
-    <string name="sys_onboarding_step2_body">Transcription and writing run on-device. No account, no cloud: nothing you record is uploaded.</string>
-    <string name="sys_onboarding_step3_title">Organize with Spaces &amp; Lenses</string>
-    <string name="sys_onboarding_step3_body">Group notes and images into Spaces, run AI Lenses over them, and grant mic and notification access only when you need them.</string>
+    <string name="sys_onboarding_step1_title">Speak freely, fold into ink</string>
+    <string name="sys_onboarding_step1_body">Tap record, think out loud on a walk, and tap again to finish. Inkvox distills raw voice into crisp notes, lists, or clear steps.</string>
+    <string name="sys_onboarding_step2_title">Private by design, all on-device</string>
+    <string name="sys_onboarding_step2_body">Both transcription and writing run locally on your phone. No account, no cloud, nothing uploaded.</string>
+    <string name="sys_onboarding_step3_title">Weave Spaces, Lenses &amp; clear steps</string>
+    <string name="sys_onboarding_step3_body">Group ideas and captures into Spaces, trace deeper patterns with AI Lenses, and grant mic and notification access only when needed.</string>
     <string name="sys_onboarding_permissions_hint">Microphone is requested when you record; notifications keep reports and captures visible in the background.</string>
     <string name="sys_onboarding_action_continue">Continue</string>
     <string name="sys_onboarding_action_get_started">Get started</string>
@@ -73,15 +73,15 @@
     <string name="sys_download_notif_cancel">Cancel</string>
     <string name="sys_download_done_llm_title">Language model ready</string>
     <string name="sys_download_done_asr_title">Transcription model ready</string>
-    <string name="sys_download_done_text">Download complete. Sievex is ready offline.</string>
+    <string name="sys_download_done_text">Download complete. Inkvox is ready offline.</string>
     <string name="sys_download_failed_title">Model download paused</string>
-    <string name="sys_download_failed_text">Tap to open Sievex and resume where it left off.</string>
+    <string name="sys_download_failed_text">Tap to open Inkvox and resume where it left off.</string>
 
     <!-- Quick Settings tile & home-screen widget -->
     <string name="sys_tile_label">Capture</string>
     <string name="sys_tile_idle">Tap to record</string>
     <string name="sys_tile_recording">Recording · Tap to stop</string>
-    <string name="sys_widget_label">Sievex Quick Capture</string>
+    <string name="sys_widget_label">Inkvox Quick Capture</string>
     <string name="sys_widget_description">Start or stop a local voice note in one tap</string>
     <string name="sys_widget_idle">Tap to capture</string>
     <string name="sys_widget_recording">Recording · Tap to stop</string>

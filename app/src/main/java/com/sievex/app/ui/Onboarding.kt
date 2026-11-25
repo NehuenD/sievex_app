@@ -74,21 +74,21 @@ private data class OnboardingStep(
 
 private val onboardingSteps = listOf(
     OnboardingStep(
-        plateLabel = "PLATE I",
+        plateLabel = "FOLIO I",
         artRes = R.drawable.art_onboard_1,
         heading = R.string.sys_onboarding_step1_title,
         body = R.string.sys_onboarding_step1_body,
         action = R.string.sys_onboarding_action_continue
     ),
     OnboardingStep(
-        plateLabel = "PLATE II",
+        plateLabel = "FOLIO II",
         artRes = R.drawable.art_onboard_2,
         heading = R.string.sys_onboarding_step2_title,
         body = R.string.sys_onboarding_step2_body,
         action = R.string.sys_onboarding_action_continue
     ),
     OnboardingStep(
-        plateLabel = "PLATE III",
+        plateLabel = "FOLIO III",
         artRes = R.drawable.art_onboard_3,
         heading = R.string.sys_onboarding_step3_title,
         body = R.string.sys_onboarding_step3_body,
@@ -131,20 +131,9 @@ fun OnboardingScreen(onDone: () -> Unit) {
                 .padding(start = 24.dp, end = 20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                Modifier
-                    .size(7.dp)
-                    .background(Signal, CircleShape)
-            )
-            Spacer(Modifier.width(9.dp))
-            Text(
-                stringResource(R.string.app_name),
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontFamily = EditorialSerif,
-                    fontWeight = FontWeight.Bold
-                ),
-                color = Ink
-            )
+            InkvoxMark(size = 22.dp)
+            Spacer(Modifier.width(8.dp))
+            InkvoxWordmark(height = 21.dp)
             Spacer(Modifier.weight(1f))
             if (step < onboardingSteps.lastIndex) {
                 SkipButton(onClick = finish)

@@ -142,7 +142,7 @@ object ModelInstaller {
         }
     }
 
-    internal fun abortBeforeStart() {
+    internal fun finishServiceDownload() {
         verifying = false
         retrying = false
         busy = false
@@ -150,7 +150,7 @@ object ModelInstaller {
     }
 
     internal fun runFallbackThread(appContext: Context) {
-        Thread { executeDownload(appContext) }.start()
+        Thread { executeDownload(appContext, manageInFlight = true) }.start()
     }
 
     private fun existingProgress(filesDir: File): Float {
@@ -173,6 +173,7 @@ object ModelInstaller {
 
     internal fun executeDownload(
         context: Context,
+        manageInFlight: Boolean = true,
         onUpdate: () -> Unit = {}
     ): ModelDownloadService.Outcome {
         val app = context.applicationContext
@@ -202,7 +203,7 @@ object ModelInstaller {
                     part.delete()
                 }
                 if (part.length() < spec.bytes) {
-                    status = localized.getString(R.string.sys_asr_status_downloading, spec.name)
+                    status = localized.getString(R.string.sys_asr_status_downloading)
                     onUpdate()
                     captureLog("model: ${spec.name} from ${part.length()} bytes")
                     fetchWithRetry(spec, part, doneBytes, localized, onUpdate)
@@ -216,7 +217,7 @@ object ModelInstaller {
                 }
                 verifying = true
                 retrying = false
-                status = localized.getString(R.string.sys_asr_status_verifying, spec.name)
+                status = localized.getString(R.string.sys_asr_status_verifying)
                 onUpdate()
                 val digest = sha256(part)
                 verifying = false
@@ -270,8 +271,10 @@ object ModelInstaller {
         } finally {
             verifying = false
             retrying = false
-            busy = false
-            inFlight.set(false)
+            if (manageInFlight) {
+                busy = false
+                inFlight.set(false)
+            }
         }
     }
 
@@ -289,6 +292,17 @@ object ModelInstaller {
             try {
                 retrying = false
                 fetch(spec, part, doneBytes, onUpdate)
+                if (part.length() < spec.bytes) {
+                    if (part.length() > before) {
+                        stalledAttempts = 0
+                    } else {
+                        stalledAttempts++
+                        if (stalledAttempts > MAX_STALL_RETRIES) {
+                            throw IOException("${spec.name}: incomplete transfer at ${part.length()} bytes")
+                        }
+                    }
+                    sleepBeforeRetry(spec, stalledAttempts, part.length(), localized, onUpdate)
+                }
             } catch (c: CancelledDownloadException) {
                 throw c
             } catch (h: HttpStatusException) {
@@ -334,7 +348,7 @@ object ModelInstaller {
             remaining -= step
         }
         retrying = false
-        status = localized.getString(R.string.sys_asr_status_downloading, spec.name)
+        status = localized.getString(R.string.sys_asr_status_downloading)
         onUpdate()
     }
 
@@ -377,6 +391,7 @@ object ModelInstaller {
                     }
 
                     var written = have
+                    var lastPct = -1
                     conn.inputStream.use { input ->
                         val buffer = ByteArray(256 * 1024)
                         while (true) {
@@ -385,8 +400,13 @@ object ModelInstaller {
                             if (n <= 0) break
                             raf.write(buffer, 0, n)
                             written += n
-                            progress = ((doneBytes + written).toFloat() / TOTAL_BYTES).coerceIn(0f, 1f)
-                            onUpdate()
+                            val nextProgress = ((doneBytes + written).toFloat() / TOTAL_BYTES).coerceIn(0f, 1f)
+                            progress = nextProgress
+                            val pct = (nextProgress * 100f).toInt().coerceIn(0, 100)
+                            if (pct != lastPct) {
+                                lastPct = pct
+                                onUpdate()
+                            }
                         }
                     }
                 }

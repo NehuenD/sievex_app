@@ -44,6 +44,7 @@ class ModelDownloadService : Service() {
     private var lastNotifyAtMs = 0L
     private var lastNotifiedPct = -1
     private var lastNotifiedKey = ""
+    private var stopped = false
 
     @Volatile
     private var destroyed = false
@@ -105,6 +106,7 @@ class ModelDownloadService : Service() {
         }
 
         val added = synchronized(stateLock) {
+            stopped = false
             val inserted = activeTargets.add(target)
             if (activeTargets.isNotEmpty()) acquireLocksLocked()
             inserted
@@ -121,11 +123,6 @@ class ModelDownloadService : Service() {
         }
         if (submitted.isFailure) {
             CaptureLog.add("download: executor rejected $target - ${submitted.exceptionOrNull()?.message}")
-            if (target == TARGET_LLM) {
-                TransformModel.abortBeforeStart()
-            } else {
-                ModelInstaller.abortBeforeStart()
-            }
             finishTarget(target, Outcome.FAILED, postCompletionNotice = false)
         }
         return START_NOT_STICKY
@@ -136,10 +133,13 @@ class ModelDownloadService : Service() {
         TransformModel.cancel()
         ModelInstaller.cancel()
         synchronized(stateLock) {
+            stopped = true
             activeTargets.clear()
             releaseLocksLocked()
+            stopForeground(STOP_FOREGROUND_REMOVE)
         }
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        TransformModel.finishServiceDownload()
+        ModelInstaller.finishServiceDownload()
         stopSelf()
         super.onTimeout(startId, fgsType)
     }
@@ -149,9 +149,11 @@ class ModelDownloadService : Service() {
         mainHandler.removeCallbacksAndMessages(null)
         if (::executor.isInitialized) executor.shutdown()
         synchronized(stateLock) {
+            stopped = true
             activeTargets.clear()
             releaseLocksLocked()
         }
+        runCatching { NotificationManagerCompat.from(this).cancel(FOREGROUND_ID) }
         super.onDestroy()
     }
 
@@ -161,21 +163,16 @@ class ModelDownloadService : Service() {
         var outcome = Outcome.FAILED
         try {
             outcome = if (target == TARGET_LLM) {
-                TransformModel.executeDownload(applicationContext) {
+                TransformModel.executeDownload(applicationContext, manageInFlight = false) {
                     updateProgressNotification(force = false)
                 }
             } else {
-                ModelInstaller.executeDownload(applicationContext) {
+                ModelInstaller.executeDownload(applicationContext, manageInFlight = false) {
                     updateProgressNotification(force = false)
                 }
             }
         } catch (t: Throwable) {
             CaptureLog.add("download: $target threw unexpectedly - ${t.message}")
-            if (target == TARGET_LLM) {
-                TransformModel.abortBeforeStart()
-            } else {
-                ModelInstaller.abortBeforeStart()
-            }
         } finally {
             finishTarget(target, outcome, postCompletionNotice = true)
         }
@@ -194,24 +191,30 @@ class ModelDownloadService : Service() {
                 false
             }
         }
+        // Release the target's inFlight latch strictly AFTER removing it from activeTargets
+        // so a new tap can never be dropped while activeTargets still contains the finished target.
+        if (target == TARGET_LLM) {
+            TransformModel.finishServiceDownload()
+        } else {
+            ModelInstaller.finishServiceDownload()
+        }
         if (!empty) {
             updateProgressNotification(force = true)
             return
         }
         mainHandler.post {
-            if (destroyed) return@post
-            val stillEmpty = synchronized(stateLock) {
+            val shouldStop = synchronized(stateLock) {
+                if (destroyed) return@synchronized false
                 if (activeTargets.isEmpty()) {
+                    stopped = true
                     releaseLocksLocked()
+                    stopForeground(STOP_FOREGROUND_REMOVE)
                     true
                 } else {
                     false
                 }
             }
-            if (stillEmpty) {
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-            }
+            if (shouldStop) stopSelf()
         }
     }
 
@@ -230,7 +233,7 @@ class ModelDownloadService : Service() {
                     acquire(LOCK_TIMEOUT_MS)
                 }
             }
-        } else if (wakeLock?.isHeld == false) {
+        } else {
             runCatching { wakeLock?.acquire(LOCK_TIMEOUT_MS) }
         }
 
@@ -255,22 +258,23 @@ class ModelDownloadService : Service() {
     }
 
     private fun updateProgressNotification(force: Boolean) {
-        val targets = snapshotTargets()
-        if (targets.isEmpty() || destroyed) return
+        synchronized(stateLock) {
+            if (destroyed || stopped || activeTargets.isEmpty()) return
+            val targets = HashSet(activeTargets)
+            val state = computeSummary(targets)
+            val now = SystemClock.elapsedRealtime()
+            val pctMoved = kotlin.math.abs(state.pct - lastNotifiedPct) >= 2
+            val phaseChanged = state.phaseKey != lastNotifiedKey
+            if (!force && !phaseChanged && (!pctMoved || now - lastNotifyAtMs < NOTIFY_MIN_INTERVAL_MS)) {
+                return
+            }
+            lastNotifyAtMs = now
+            lastNotifiedPct = state.pct
+            lastNotifiedKey = state.phaseKey
 
-        val state = computeSummary(targets)
-        val now = SystemClock.elapsedRealtime()
-        val pctMoved = kotlin.math.abs(state.pct - lastNotifiedPct) >= 2
-        val phaseChanged = state.phaseKey != lastNotifiedKey
-        if (!force && !phaseChanged && (!pctMoved || now - lastNotifyAtMs < NOTIFY_MIN_INTERVAL_MS)) {
-            return
+            val notif = buildProgressNotification(targets, state)
+            runCatching { NotificationManagerCompat.from(this).notify(FOREGROUND_ID, notif) }
         }
-        lastNotifyAtMs = now
-        lastNotifiedPct = state.pct
-        lastNotifiedKey = state.phaseKey
-
-        val notif = buildProgressNotification(targets, state)
-        runCatching { NotificationManagerCompat.from(this).notify(FOREGROUND_ID, notif) }
     }
 
     private data class ProgressSummary(

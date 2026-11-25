@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -42,8 +43,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -187,33 +186,62 @@ internal fun CloseIconButton(
     }
 }
 
-/**
- * Hue-preserving luminance inversion for dark mode: maps white paper fills to warm charcoal
- * and black ink to luminous ivory while retaining terracotta, slate-blue, sage, and brass hues.
- */
-private val DarkEditorialArtFilter = ColorFilter.colorMatrix(
-    ColorMatrix(
-        floatArrayOf(
-            0.6803f, -1.3446f, -0.1357f, 0f, 237.15f,
-            -0.3997f, -0.2646f, -0.1357f, 0f, 234.60f,
-            -0.3997f, -1.3446f, 0.9443f, 0f, 229.50f,
-            0f, 0f, 0f, 1f, 0f
-        )
+/** Compact Inkvox Origami Codex quill-and-drop badge mark. */
+@Composable
+internal fun InkvoxMark(
+    modifier: Modifier = Modifier,
+    size: Dp = 24.dp
+) {
+    Image(
+        painter = painterResource(id = R.drawable.ic_inkvox_mark),
+        contentDescription = null,
+        contentScale = ContentScale.Fit,
+        modifier = modifier.size(size)
     )
-)
+}
 
-/** Renders editorial spot illustrations naturally in both light paper and dark obsidian themes. */
+/** Custom Origami-Cut "Inkvox." wordmark adapted natively to light paper and dark emerald surfaces. */
+@Composable
+internal fun InkvoxWordmark(
+    modifier: Modifier = Modifier,
+    height: Dp = 28.dp
+) {
+    val wordmarkRes = if (IsDarkTheme) {
+        R.drawable.ic_inkvox_wordmark_dark
+    } else {
+        R.drawable.ic_inkvox_wordmark_light
+    }
+    Image(
+        painter = painterResource(id = wordmarkRes),
+        contentDescription = stringResource(R.string.app_name),
+        contentScale = ContentScale.Fit,
+        modifier = modifier
+            .height(height)
+            .aspectRatio(1020f / 224f)
+    )
+}
+
+/** Renders native Origami Codex illustrations tuned specifically for light paper or dark forest mode. */
 @Composable
 internal fun EditorialArtwork(
     @DrawableRes resId: Int,
     contentDescription: String?,
     modifier: Modifier = Modifier
 ) {
+    val resolvedRes = if (IsDarkTheme) {
+        when (resId) {
+            R.drawable.art_onboard_1 -> R.drawable.art_onboard_1_dark
+            R.drawable.art_onboard_2 -> R.drawable.art_onboard_2_dark
+            R.drawable.art_onboard_3 -> R.drawable.art_onboard_3_dark
+            else -> resId
+        }
+    } else {
+        resId
+    }
     Image(
-        painter = painterResource(id = resId),
+        painter = painterResource(id = resolvedRes),
         contentDescription = contentDescription,
         contentScale = ContentScale.Fit,
-        colorFilter = if (IsDarkTheme) DarkEditorialArtFilter else null,
         modifier = modifier
     )
 }

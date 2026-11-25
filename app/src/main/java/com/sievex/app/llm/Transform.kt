@@ -289,7 +289,7 @@ line-char ::= [^"\\\x7F\x00-\x1F] | "\\" (["\\] | "u" [0-9a-fA-F]{4})
                 return null
             }
 
-            val fullRaw = if (raw.isNotBlank() && !raw.trimStart().startsWith("{")) prefill + raw else raw
+            val fullRaw = if (raw.isNotBlank()) prefill + raw else raw
             val parsed = if (format == NoteFormat.NOTE) {
                 parseNote(fullRaw, transcript)
             } else {

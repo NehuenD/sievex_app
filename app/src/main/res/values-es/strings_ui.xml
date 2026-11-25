@@ -13,7 +13,7 @@
     <string name="ui_tab_notes">Notas</string>
     <string name="ui_tab_actions">Acciones</string>
     <string name="ui_tab_settings">Ajustes</string>
-    <string name="ui_brand_name">SievexAI</string>
+    <string name="ui_brand_name">Inkvox</string>
     <string name="ui_action_back">Atrás</string>
     <string name="ui_action_edit">Editar</string>
     <string name="ui_action_cancel">Cancelar</string>
@@ -245,7 +245,7 @@
     <string name="ui_media_delete_body">Esto elimina la imagen del espacio. Las notas vinculadas se conservan.</string>
     <string name="ui_media_delete_confirm">Eliminar imagen</string>
     <string name="ui_note_images">Imágenes</string>
-    <string name="ui_share_title">Guardar imagen en Sievex</string>
+    <string name="ui_share_title">Guardar imagen en Inkvox</string>
     <string name="ui_share_count_many">%1$d imágenes</string>
     <string name="ui_share_space_label">Espacio</string>
     <string name="ui_share_no_spaces">Crea un espacio para guardar esta imagen</string>
@@ -365,7 +365,7 @@
     <!-- Compartir recortes de texto y OCR automático -->
     <string name="ui_share_also_shape_ocr">También convertir el OCR en una nota</string>
     <string name="ui_share_shaping_background">Guardado · creando nota OCR en segundo plano</string>
-    <string name="ui_share_text_title">Guardar recorte en Sievex</string>
+    <string name="ui_share_text_title">Guardar recorte en Inkvox</string>
     <string name="ui_share_text_subtitle">Cita, enlace o fragmento</string>
     <string name="ui_share_text_clip_label">Texto compartido</string>
     <string name="ui_share_text_clip_hint">Texto o enlace</string>

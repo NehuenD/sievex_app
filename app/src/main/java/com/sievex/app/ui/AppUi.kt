@@ -41,7 +41,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.verticalScroll
@@ -366,27 +365,6 @@ internal fun LinkifiedText(
         },
         onTextLayout = { layout = it }
     )
-}
-
-@Composable
-internal fun ScreenHeader(title: String, subtitle: String? = null) {
-    Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(8.dp)
-                    .background(Signal, CircleShape)
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.ui_brand_name), style = MaterialTheme.typography.labelSmall, color = Ink2)
-        }
-        Spacer(Modifier.height(10.dp))
-        Text(title, style = MaterialTheme.typography.headlineMedium, color = Ink)
-        if (subtitle != null) {
-            Spacer(Modifier.height(4.dp))
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Ink2)
-        }
-    }
 }
 
 @Composable

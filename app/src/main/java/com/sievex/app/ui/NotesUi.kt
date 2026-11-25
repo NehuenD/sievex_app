@@ -76,6 +76,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -245,13 +250,12 @@ internal fun NotesScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(R.string.app_name),
-                            style = MaterialTheme.typography.displaySmall,
-                            color = Ink,
-                            maxLines = 1
-                        )
-                        Spacer(Modifier.height(2.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            InkvoxMark(size = 26.dp)
+                            Spacer(Modifier.width(9.dp))
+                            InkvoxWordmark(height = 28.dp)
+                        }
+                        Spacer(Modifier.height(4.dp))
                         Text(
                             text = colophon,
                             style = MaterialTheme.typography.labelSmall.copy(
@@ -960,7 +964,7 @@ internal fun EditorialNoteRow(
                     onClick = { menuOpen = true },
                     color = Color.Transparent,
                     shape = CircleShape,
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(44.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
@@ -1562,7 +1566,12 @@ internal fun NoteDetailScreen(
                                             1.dp,
                                             if (stepDone) Mint.copy(alpha = 0.65f) else Line
                                         ),
-                                        modifier = Modifier.size(40.dp)
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .semantics {
+                                                role = Role.Checkbox
+                                                toggleableState = if (stepDone) ToggleableState.On else ToggleableState.Off
+                                            }
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
                                             Text(

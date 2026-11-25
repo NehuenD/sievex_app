@@ -281,7 +281,7 @@ private fun SpaceBookCoverCard(
                                 onClick = { menuOpen = true },
                                 color = Color.Transparent,
                                 shape = CircleShape,
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.size(44.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
@@ -1137,7 +1137,7 @@ private fun LensChip(
                 Spacer(Modifier.width(4.dp))
                 Box(
                     Modifier
-                        .size(28.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .clickable { onManage() },
                     contentAlignment = Alignment.Center
