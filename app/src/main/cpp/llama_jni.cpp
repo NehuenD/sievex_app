@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <fstream>
 #include <memory>
@@ -62,12 +63,17 @@ ggml_threadpool_t g_tp_batch = nullptr;
 ThreadpoolNewFn g_tp_new = nullptr;
 ThreadpoolFreeFn g_tp_free = nullptr;
 
+struct SamplerEntry {
+    llama_sampler * chain = nullptr;
+    llama_sampler * grammar = nullptr;  // non-owning pointer owned by chain
+};
+
 std::string g_model_path;
 std::vector<llama_token> g_cache_tokens;  // tokens resident in KV, positions 0..size-1
 int32_t g_n_ctx = 0;
 std::unordered_map<std::string, PrefixEntry> g_prefix_cache;
 uint64_t g_prefix_tick = 0;
-std::unordered_map<std::string, llama_sampler *> g_sampler_cache;
+std::unordered_map<std::string, SamplerEntry> g_sampler_cache;
 
 struct BigCoreInfo {
     bool probed = false;
@@ -176,8 +182,8 @@ ggml_threadpool_t make_threadpool(int32_t n_threads) {
 
 void clear_samplers() {
     for (auto & kv : g_sampler_cache) {
-        if (kv.second != nullptr) {
-            llama_sampler_free(kv.second);
+        if (kv.second.chain != nullptr) {
+            llama_sampler_free(kv.second.chain);
         }
     }
     g_sampler_cache.clear();
@@ -281,22 +287,35 @@ bool ensure_capacity(int32_t needed) {
     return false;
 }
 
-std::vector<llama_token> tokenize(const llama_vocab * vocab, const std::string & text) {
+std::vector<llama_token> tokenize_with_flags(
+        const llama_vocab * vocab,
+        const std::string & text,
+        bool add_special,
+        bool parse_special) {
     if (text.empty()) return {};
     int32_t needed = llama_tokenize(
-            vocab, text.data(), static_cast<int32_t>(text.size()), nullptr, 0, true, true);
+            vocab, text.data(), static_cast<int32_t>(text.size()),
+            nullptr, 0, add_special, parse_special);
     if (needed == 0) return {};
     const int32_t cap = needed < 0 ? -needed : needed;
     std::vector<llama_token> tokens(static_cast<size_t>(cap));
     int32_t n = llama_tokenize(
             vocab, text.data(), static_cast<int32_t>(text.size()),
-            tokens.data(), cap, true, true);
+            tokens.data(), cap, add_special, parse_special);
     if (n < 0) {
         LOGE("tokenize failed: %d", n);
         return {};
     }
     tokens.resize(static_cast<size_t>(n));
     return tokens;
+}
+
+std::vector<llama_token> tokenize(const llama_vocab * vocab, const std::string & text) {
+    return tokenize_with_flags(vocab, text, true, true);
+}
+
+std::vector<llama_token> tokenize_raw(const llama_vocab * vocab, const std::string & text) {
+    return tokenize_with_flags(vocab, text, false, false);
 }
 
 /** Feeds tokens [begin, end) into the context; requests logits on the last token if asked. */
@@ -327,15 +346,29 @@ bool process_range(
     return true;
 }
 
-/** Feeds exactly one token at [pos], requesting its logits. */
-bool process_one(llama_token token, int32_t pos) {
-    llama_batch_ext_clear(g_batch);
-    const int32_t idx = llama_batch_ext_add_token(g_batch, 0, token);
-    if (idx < 0) return false;
-    llama_pos p = pos;
-    llama_batch_ext_set_pos(g_batch, idx, &p);
-    llama_batch_ext_set_output_logits(g_batch, idx, true);
-    return llama_process(g_ctx, LLAMA_PROCESS_TYPE_DECODE, g_batch) == 0;
+/** Feeds [toks] sequentially starting at [start_pos], requesting logits only on the last token. */
+bool process_tokens_at(
+        const std::vector<llama_token> & toks,
+        int32_t start_pos,
+        bool request_logits = true) {
+    if (toks.empty()) return true;
+    const int32_t count = static_cast<int32_t>(toks.size());
+    for (int32_t chunk = 0; chunk < count; chunk += kBatch) {
+        const int32_t chunk_end = (chunk + kBatch < count) ? chunk + kBatch : count;
+        llama_batch_ext_clear(g_batch);
+        for (int32_t i = chunk; i < chunk_end; i++) {
+            const int32_t idx = llama_batch_ext_add_token(g_batch, 0, toks[static_cast<size_t>(i)]);
+            if (idx < 0) return false;
+            llama_pos pos = start_pos + i;
+            llama_batch_ext_set_pos(g_batch, idx, &pos);
+        }
+        const bool last_chunk = request_logits && (chunk_end == count);
+        llama_batch_ext_set_output_logits(g_batch, chunk_end - chunk - 1, last_chunk);
+        if (llama_process(g_ctx, LLAMA_PROCESS_TYPE_DECODE, g_batch) != 0) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void append_piece(std::string & out, const llama_vocab * vocab, llama_token id) {
@@ -415,17 +448,17 @@ struct PhaseReporter {
     }
 };
 
-void log_perf(int32_t n_prompt, int32_t n_keep, int32_t n_generated) {
+void log_perf(int32_t n_prompt, int32_t n_keep, int32_t n_generated, int32_t n_forced) {
     const llama_perf_context_data perf = llama_perf_context(g_ctx);
     const double pp_s = perf.t_p_eval_ms > 0.0 ? perf.t_p_eval_ms / 1000.0 : 0.0;
     const double tg_s = perf.t_eval_ms > 0.0 ? perf.t_eval_ms / 1000.0 : 0.0;
     LOGI("pp %d tok (kept %d/%d) %.0f ms %.1f tok/s | tg %d tok %.0f ms %.1f tok/s | "
-         "reused %d realloc %d/%d",
+         "reused %d realloc %d/%d forced %d",
          perf.n_p_eval, n_keep, n_prompt, perf.t_p_eval_ms,
          pp_s > 0.0 ? perf.n_p_eval / pp_s : 0.0,
          perf.n_eval, perf.t_eval_ms,
          tg_s > 0.0 ? perf.n_eval / tg_s : 0.0,
-         perf.n_reused, perf.n_reallocs_same, perf.n_reallocs_diff);
+         perf.n_reused, perf.n_reallocs_same, perf.n_reallocs_diff, n_forced);
     (void) n_generated;
 }
 
@@ -441,28 +474,66 @@ void evict_oldest_prefix_if_needed() {
     }
 }
 
-llama_sampler * get_or_create_sampler(const llama_vocab * vocab, const std::string & grammar) {
+SamplerEntry get_or_create_sampler(const llama_vocab * vocab, const std::string & grammar) {
     auto it = g_sampler_cache.find(grammar);
     if (it != g_sampler_cache.end()) {
-        llama_sampler_reset(it->second);
+        llama_sampler_reset(it->second.chain);
         return it->second;
     }
 
     llama_sampler_chain_params sparams = llama_sampler_chain_default_params();
     llama_sampler * smpl = llama_sampler_chain_init(sparams);
-    if (smpl == nullptr) return nullptr;
+    if (smpl == nullptr) return {};
 
+    llama_sampler * grammar_sampler = nullptr;
     if (!grammar.empty()) {
-        llama_sampler * grammar_sampler = llama_sampler_init_grammar(vocab, grammar.c_str(), "root");
+        grammar_sampler = llama_sampler_init_grammar(vocab, grammar.c_str(), "root");
         if (grammar_sampler != nullptr) {
             llama_sampler_chain_add(smpl, grammar_sampler);
         } else {
             LOGE("grammar rejected; sampling unconstrained");
         }
     }
+    llama_sampler_chain_add(smpl, llama_sampler_init_top_k(40));
+    llama_sampler_chain_add(smpl, llama_sampler_init_penalties(llama_vocab_n_tokens(vocab), 64, 1.08f, 0.0f, 0.0f));
     llama_sampler_chain_add(smpl, llama_sampler_init_greedy());
-    g_sampler_cache.emplace(grammar, smpl);
-    return smpl;
+    SamplerEntry entry{ smpl, grammar_sampler };
+    g_sampler_cache.emplace(grammar, entry);
+    return entry;
+}
+
+struct SeparatorSpec {
+    bool on_array_close;
+    const char * literal;
+};
+
+constexpr SeparatorSpec kNoteSeps[] = {
+    { false, ",\"mode\":\"" },
+    { false, ",\"title\":\"" },
+    { false, ",\"why_it_matters\":\"" },
+    { false, ",\"question_drafts\":[" },
+    { true,  ",\"tags\":[" },
+    { true,  "}" },
+};
+
+constexpr SeparatorSpec kItemsSeps[] = {
+    { true,  ",\"title\":\"" },
+    { false, ",\"tags\":[" },
+    { true,  "}" },
+};
+
+const SeparatorSpec * separator_for(int schema_kind, int idx) {
+    if (schema_kind == 1 && idx >= 0 && idx < 6) return &kNoteSeps[idx];
+    if (schema_kind == 2 && idx >= 0 && idx < 3) return &kItemsSeps[idx];
+    return nullptr;
+}
+
+bool is_token_legal_in_grammar(llama_sampler * grammar_sampler, llama_token tok) {
+    if (grammar_sampler == nullptr) return true;
+    llama_token_data td = { tok, 0.0f, 0.0f };
+    llama_token_data_array arr = { &td, 1, -1, false };
+    llama_sampler_apply(grammar_sampler, &arr);
+    return !std::isinf(td.logit) && td.logit > -1e20f;
 }
 
 }  // namespace
@@ -692,70 +763,197 @@ static jbyteArray complete_locked(
     }
 
     // ---- sample -----------------------------------------------------------------------------
-    llama_sampler * smpl = get_or_create_sampler(vocab, grammar);
+    SamplerEntry sampler_entry = get_or_create_sampler(vocab, grammar);
+    llama_sampler * smpl = sampler_entry.chain;
     if (smpl == nullptr) {
         set_error("sampler init failed");
         return empty_bytes(env);
     }
     const bool stop_on_json_object = !grammar.empty();
 
+    std::string assistant_prefill;
+    const std::string assistant_marker = "<|im_start|>assistant\n";
+    const size_t assistant_pos = prompt.rfind(assistant_marker);
+    if (assistant_pos != std::string::npos) {
+        assistant_prefill = prompt.substr(assistant_pos + assistant_marker.size());
+    }
+
+    int schema_kind = 0;
+    if (assistant_prefill == "{\"one_line\":\"") {
+        schema_kind = 1;
+    } else if (assistant_prefill == "{\"items\":[\"") {
+        schema_kind = 2;
+    }
+
     std::string out;
     int32_t depth = 0;
+    int32_t array_depth = 0;
     bool opened = false;
     bool in_string = false;
     bool escaped = false;
+    bool expecting_key = false;
+    int next_sep_idx = 0;
+
+    auto scan_char = [&](char ch, bool track_seps, int * out_sep) {
+        if (in_string) {
+            if (escaped) {
+                escaped = false;
+            } else if (ch == '\\') {
+                escaped = true;
+            } else if (ch == '"') {
+                in_string = false;
+                if (!expecting_key && depth == 1 && array_depth == 0 && track_seps) {
+                    const SeparatorSpec * spec = separator_for(schema_kind, next_sep_idx);
+                    if (spec != nullptr && !spec->on_array_close) {
+                        *out_sep = next_sep_idx;
+                        next_sep_idx++;
+                    }
+                }
+            }
+        } else if (ch == '"') {
+            in_string = true;
+        } else if (ch == '{') {
+            depth++;
+            opened = true;
+            if (depth == 1 && array_depth == 0) expecting_key = true;
+        } else if (ch == '}') {
+            if (depth > 0) depth--;
+        } else if (ch == '[') {
+            array_depth++;
+        } else if (ch == ']') {
+            const int32_t prev_array = array_depth;
+            if (array_depth > 0) array_depth--;
+            if (prev_array == 1 && array_depth == 0 && depth == 1 && track_seps) {
+                const SeparatorSpec * spec = separator_for(schema_kind, next_sep_idx);
+                if (spec != nullptr && spec->on_array_close) {
+                    *out_sep = next_sep_idx;
+                    next_sep_idx++;
+                }
+            }
+        } else if (ch == ',' && depth == 1 && array_depth == 0) {
+            expecting_key = true;
+        } else if (ch == ':' && depth == 1 && array_depth == 0) {
+            expecting_key = false;
+        }
+    };
+
+    for (char ch : assistant_prefill) {
+        int unused_sep = -1;
+        scan_char(ch, false, &unused_sep);
+    }
+
     int32_t n_generated = 0;
+    int32_t n_forced = 0;
     PhaseReporter progress(env, jprogress);
+    auto emit_field_phases = [&]() {
+        if (progress.method == nullptr) return;
+        if (progress.last < 2 && out.find("\"mode\"") != std::string::npos) progress.emit(2);
+        if (progress.last < 3 && out.find("\"title\"") != std::string::npos) progress.emit(3);
+        if (progress.last < 4 && out.find("\"why_it_matters\"") != std::string::npos) progress.emit(4);
+        if (progress.last < 5 && out.find("\"question_drafts\"") != std::string::npos) progress.emit(5);
+        if (progress.last < 6 && out.find("\"tags\"") != std::string::npos) progress.emit(6);
+    };
     progress.emit(1);
-    for (int32_t i = 0; i < maxTokens; i++) {
+
+    std::vector<llama_token> step_tokens;
+    step_tokens.reserve(16);
+
+    while (n_generated < maxTokens) {
         const llama_token id = llama_sampler_sample(smpl, g_ctx, -1);
         if (id < 0) break;
         if (llama_vocab_is_eog(vocab, id)) break;
 
         const size_t piece_begin = out.size();
         append_piece(out, vocab, id);
+        int triggered_sep = -1;
+        size_t close_end_pos = out.size();
         if (stop_on_json_object) {
             for (size_t c = piece_begin; c < out.size(); c++) {
-                const char ch = out[c];
-                if (in_string) {
-                    if (escaped) {
-                        escaped = false;
-                    } else if (ch == '\\') {
-                        escaped = true;
-                    } else if (ch == '"') {
-                        in_string = false;
-                    }
-                } else if (ch == '"') {
-                    in_string = true;
-                } else if (ch == '{') {
-                    depth++;
-                    opened = true;
-                } else if (ch == '}') {
-                    if (depth > 0) depth--;
+                int fired = -1;
+                scan_char(out[c], schema_kind != 0 && sampler_entry.grammar != nullptr, &fired);
+                if (fired >= 0) {
+                    triggered_sep = fired;
+                    close_end_pos = c + 1;
                 }
             }
         }
         n_generated++;
+        emit_field_phases();
 
-        if (progress.method != nullptr) {
-            if (progress.last < 2 && out.find("\"title\"") != std::string::npos) progress.emit(2);
-            if (progress.last < 3 && (out.find("\"one_line\"") != std::string::npos ||
-                                      out.find("\"items\"") != std::string::npos)) progress.emit(3);
-            if (progress.last < 4 && out.find("\"why_it_matters\"") != std::string::npos) progress.emit(4);
-            if (progress.last < 5 && out.find("\"tags\"") != std::string::npos) progress.emit(5);
+        if (stop_on_json_object && opened && depth <= 0) break;
+
+        step_tokens.clear();
+        step_tokens.push_back(id);
+
+        if (triggered_sep >= 0 && sampler_entry.grammar != nullptr) {
+            const SeparatorSpec * spec = separator_for(schema_kind, triggered_sep);
+            if (spec != nullptr) {
+                const std::string expected(spec->literal);
+                const std::string already = out.substr(close_end_pos);
+                if (expected.size() > already.size() &&
+                    expected.compare(0, already.size(), already) == 0) {
+                    const std::string rem = expected.substr(already.size());
+                    if (rem == "}") {
+                        std::vector<llama_token> close_toks = tokenize_raw(vocab, rem);
+                        if (close_toks.size() == 1 &&
+                            is_token_legal_in_grammar(sampler_entry.grammar, close_toks[0])) {
+                            llama_sampler_accept(smpl, close_toks[0]);
+                            const size_t fb = out.size();
+                            append_piece(out, vocab, close_toks[0]);
+                            for (size_t c = fb; c < out.size(); c++) {
+                                int unused_sep = -1;
+                                scan_char(out[c], false, &unused_sep);
+                            }
+                            n_generated++;
+                            n_forced++;
+                            emit_field_phases();
+                            break;
+                        }
+                    } else {
+                        std::vector<llama_token> rem_toks = tokenize_raw(vocab, rem);
+                        std::string roundtrip;
+                        for (llama_token rt : rem_toks) {
+                            append_piece(roundtrip, vocab, rt);
+                        }
+                        if (!rem_toks.empty() && roundtrip == rem) {
+                            for (llama_token tok : rem_toks) {
+                                if (n_generated >= maxTokens) break;
+                                if (static_cast<int32_t>(g_cache_tokens.size() + step_tokens.size()) >= g_n_ctx) {
+                                    break;
+                                }
+                                if (!is_token_legal_in_grammar(sampler_entry.grammar, tok)) {
+                                    break;
+                                }
+                                llama_sampler_accept(smpl, tok);
+                                const size_t fb = out.size();
+                                append_piece(out, vocab, tok);
+                                for (size_t c = fb; c < out.size(); c++) {
+                                    int unused_sep = -1;
+                                    scan_char(out[c], false, &unused_sep);
+                                }
+                                step_tokens.push_back(tok);
+                                n_generated++;
+                                n_forced++;
+                                emit_field_phases();
+                                if (stop_on_json_object && opened && depth <= 0) break;
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         if (stop_on_json_object && opened && depth <= 0) break;
 
-        if (!process_one(id, static_cast<int32_t>(g_cache_tokens.size()))) {
+        if (!process_tokens_at(step_tokens, static_cast<int32_t>(g_cache_tokens.size()), true)) {
             llama_memory_clear(mem, false);
             g_cache_tokens.clear();
             break;
         }
-        g_cache_tokens.push_back(id);
+        g_cache_tokens.insert(g_cache_tokens.end(), step_tokens.begin(), step_tokens.end());
     }
 
-    log_perf(n_prompt, n_keep, n_generated);
+    log_perf(n_prompt, n_keep, n_generated, n_forced);
     llama_sampler_reset(smpl);
     return to_byte_array(env, out);
 }

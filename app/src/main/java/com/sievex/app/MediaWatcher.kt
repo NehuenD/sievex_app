@@ -19,6 +19,7 @@ class MediaWatcher : NotificationListenerService() {
     private var msm: MediaSessionManager? = null
     private val handler = Handler(Looper.getMainLooper())
     private val lastState = HashMap<String, Int>()
+    private val lastMeta = HashMap<String, String>()
     private val registrations = HashMap<MediaSession.Token, Pair<MediaController, MediaController.Callback>>()
 
     private val activeListener =
@@ -61,6 +62,7 @@ class MediaWatcher : NotificationListenerService() {
         }
         registrations.clear()
         lastState.clear()
+        lastMeta.clear()
     }
 
     private fun attach(list: List<MediaController>?) {
@@ -79,12 +81,16 @@ class MediaWatcher : NotificationListenerService() {
             if (token in registrations) continue
             val pkg = controller.packageName
             CaptureLog.add("attach $pkg")
+            val initialMeta = formatMetadata(controller.metadata)
+            if (initialMeta.isNotEmpty()) lastMeta[pkg] = initialMeta
             val cb = object : MediaController.Callback() {
                 override fun onPlaybackStateChanged(state: PlaybackState?) {
                     handle(pkg, state)
                 }
 
                 override fun onMetadataChanged(metadata: MediaMetadata?) {
+                    val formatted = formatMetadata(metadata)
+                    if (formatted.isNotEmpty()) lastMeta[pkg] = formatted else lastMeta.remove(pkg)
                     if (CaptureService.armed || CaptureService.isRecording) {
                         val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
                         val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
@@ -97,6 +103,7 @@ class MediaWatcher : NotificationListenerService() {
                         runCatching { ctrl.unregisterCallback(callback) }
                     }
                     lastState.remove(pkg)
+                    lastMeta.remove(pkg)
                 }
             }
             controller.registerCallback(cb, handler)
@@ -120,12 +127,24 @@ class MediaWatcher : NotificationListenerService() {
         }
 
         if (prev == PlaybackState.STATE_PLAYING && s == PlaybackState.STATE_PAUSED) {
-            CaptureService.trigger(true, "pause in $pkg")
+            CaptureService.trigger(true, "pause in $pkg", sourceLabel = lastMeta[pkg].orEmpty())
         } else if (s == PlaybackState.STATE_PLAYING &&
             (prev == PlaybackState.STATE_PAUSED || CaptureService.isRecording)
         ) {
             CaptureService.trigger(false, "resume in $pkg")
         }
+    }
+
+    private fun formatMetadata(metadata: MediaMetadata?): String {
+        if (metadata == null) return ""
+        val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE)?.replace(Regex("\\s+"), " ")?.trim().orEmpty()
+        val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST)?.replace(Regex("\\s+"), " ")?.trim().orEmpty()
+        val combined = when {
+            title.isNotEmpty() && artist.isNotEmpty() && !title.equals(artist, ignoreCase = true) -> "$title — $artist"
+            title.isNotEmpty() -> title
+            else -> artist
+        }
+        return combined.take(120)
     }
 
     private fun name(state: Int): String = when (state) {

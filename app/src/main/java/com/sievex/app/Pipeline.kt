@@ -12,7 +12,7 @@ enum class PipelineStage { IDLE, TRANSCRIBING, TRANSFORMING, DONE, FAILED }
  * One action inside the transform, as a key rather than a sentence: the UI owns the words, so
  * the status card can be English or Spanish without the service knowing either language.
  */
-enum class PipelineStep { INTENT, DICTATION, TITLE, SUMMARY, ITEMS, STEPS, INSIGHTS, TAGS, SAVING }
+enum class PipelineStep { INTENT, DICTATION, TITLE, SUMMARY, ITEMS, STEPS, INSIGHTS, QUESTIONS, TAGS, SAVING }
 
 /**
  * Observable state of the background pipeline. The service writes, the UI reads.
@@ -139,23 +139,22 @@ object Pipeline {
     }
 
     /**
-     * Phase numbers come from `LlamaBridge.TransformProgress`: 1 is the start of generation, then
-     * the grammar-pinned field keys (`title`, `one_line` or `items`, `why_it_matters`, `tags`).
+     * Phase numbers come from `LlamaBridge.TransformProgress`: 1 is the start of generation
+     * (`one_line` for Note, `items` for List/Steps), then `mode`, `title`, `why_it_matters`,
+     * `question_drafts`, `tags`.
      */
     private fun stepFor(format: NoteFormat, phase: Int): PipelineStep? = when (phase) {
         1 -> when (format) {
-            NoteFormat.LIST, NoteFormat.STEPS -> PipelineStep.DICTATION
-            NoteFormat.PLAIN -> PipelineStep.SAVING
-            else -> PipelineStep.INTENT
-        }
-        2 -> PipelineStep.TITLE
-        3 -> when (format) {
             NoteFormat.LIST -> PipelineStep.ITEMS
             NoteFormat.STEPS -> PipelineStep.STEPS
+            NoteFormat.PLAIN -> PipelineStep.SAVING
             else -> PipelineStep.SUMMARY
         }
+        2 -> PipelineStep.INTENT
+        3 -> PipelineStep.TITLE
         4 -> PipelineStep.INSIGHTS
-        5 -> PipelineStep.TAGS
+        5 -> PipelineStep.QUESTIONS
+        6 -> PipelineStep.TAGS
         else -> null
     }
 }

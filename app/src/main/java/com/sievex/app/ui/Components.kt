@@ -1,6 +1,8 @@
 package com.sievex.app.ui
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -28,14 +31,21 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -104,13 +114,14 @@ internal fun SubTab(
         enabled = enabled,
         color = if (selected) SignalSoft else Surface2,
         shape = RoundedCornerShape(999.dp),
+        border = if (selected) BorderStroke(1.dp, Signal.copy(alpha = 0.4f)) else BorderStroke(1.dp, Line),
         modifier = Modifier
             .heightIn(min = 48.dp)
             .alpha(if (enabled) 1f else 0.42f)
     ) {
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
         ) {
             Text(
                 label,
@@ -175,8 +186,68 @@ internal fun CloseIconButton(
     }
 }
 
+/** Compact Inkvox Origami Codex quill-and-drop badge mark. */
+@Composable
+internal fun InkvoxMark(
+    modifier: Modifier = Modifier,
+    size: Dp = 24.dp
+) {
+    Image(
+        painter = painterResource(id = R.drawable.ic_inkvox_mark),
+        contentDescription = null,
+        contentScale = ContentScale.Fit,
+        modifier = modifier.size(size)
+    )
+}
+
+/** Custom Origami-Cut "Inkvox." wordmark adapted natively to light paper and dark emerald surfaces. */
+@Composable
+internal fun InkvoxWordmark(
+    modifier: Modifier = Modifier,
+    height: Dp = 28.dp
+) {
+    val wordmarkRes = if (IsDarkTheme) {
+        R.drawable.ic_inkvox_wordmark_dark
+    } else {
+        R.drawable.ic_inkvox_wordmark_light
+    }
+    Image(
+        painter = painterResource(id = wordmarkRes),
+        contentDescription = stringResource(R.string.app_name),
+        contentScale = ContentScale.Fit,
+        modifier = modifier
+            .height(height)
+            .aspectRatio(1020f / 224f)
+    )
+}
+
+/** Renders native Origami Codex illustrations tuned specifically for light paper or dark forest mode. */
+@Composable
+internal fun EditorialArtwork(
+    @DrawableRes resId: Int,
+    contentDescription: String?,
+    modifier: Modifier = Modifier
+) {
+    val resolvedRes = if (IsDarkTheme) {
+        when (resId) {
+            R.drawable.art_onboard_1 -> R.drawable.art_onboard_1_dark
+            R.drawable.art_onboard_2 -> R.drawable.art_onboard_2_dark
+            R.drawable.art_onboard_3 -> R.drawable.art_onboard_3_dark
+            else -> resId
+        }
+    } else {
+        resId
+    }
+    Image(
+        painter = painterResource(id = resolvedRes),
+        contentDescription = contentDescription,
+        contentScale = ContentScale.Fit,
+        modifier = modifier
+    )
+}
+
 /**
- * Labelled dark-well text field shared across editors, space/lens dialogs, and Share sheet.
+ * Labelled folio-well text field shared across editors, space/lens dialogs, and Share sheet.
  */
 @Composable
 internal fun EditorField(
@@ -193,12 +264,13 @@ internal fun EditorField(
     imeAction: ImeAction = if (singleLine) ImeAction.Done else ImeAction.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default
 ) {
+    var focused by remember { mutableStateOf(false) }
     Column(modifier = modifier) {
         if (label.isNotEmpty()) {
             Text(
                 text = if (required) "$label *" else label,
                 style = MaterialTheme.typography.labelSmall,
-                color = Ink2
+                color = if (focused) SignalText else Ink2
             )
             Spacer(Modifier.height(8.dp))
         }
@@ -206,13 +278,14 @@ internal fun EditorField(
             .fillMaxWidth()
             .heightIn(min = minHeight)
             .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
+            .onFocusChanged { focused = it.isFocused }
 
         Box(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(10.dp))
                 .background(Surface2)
-                .border(1.dp, Line, RoundedCornerShape(16.dp))
+                .border(1.dp, if (focused) Signal.copy(alpha = 0.65f) else Line, RoundedCornerShape(10.dp))
                 .alpha(if (enabled) 1f else 0.6f)
                 .padding(horizontal = 14.dp, vertical = 13.dp)
         ) {
@@ -238,7 +311,7 @@ internal fun EditorField(
     }
 }
 
-/** Shared modal card container so all dialogs in AppUi, MediaUi, and ShareImageActivity match. */
+/** Shared modal folio container so all dialogs in AppUi, MediaUi, and ShareImageActivity match. */
 @Composable
 internal fun AppDialogSurface(
     onDismissRequest: () -> Unit,
@@ -248,8 +321,8 @@ internal fun AppDialogSurface(
     Dialog(onDismissRequest = onDismissRequest) {
         Surface(
             color = Surface1,
-            shape = RoundedCornerShape(24.dp),
-            border = BorderStroke(1.dp, Line),
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, LineStrong),
             modifier = modifier.fillMaxWidth()
         ) {
             Column(Modifier.padding(20.dp), content = content)
@@ -268,12 +341,12 @@ internal fun ConfirmDialog(
     destructive: Boolean = true
 ) {
     AppDialogSurface(onDismissRequest = onDismiss) {
-        Text(title, style = MaterialTheme.typography.titleMedium, color = Ink)
+        Text(title, style = MaterialTheme.typography.headlineSmall, color = Ink)
         Spacer(Modifier.height(10.dp))
         Text(body, style = MaterialTheme.typography.bodySmall, color = Ink2)
         Spacer(Modifier.height(18.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            PillButton(dismissLabel, Surface2, Ink, onDismiss)
+            PillButton(dismissLabel, Surface2, Ink, onDismiss, border = BorderStroke(1.dp, Line))
             Spacer(Modifier.width(10.dp))
             PillButton(
                 label = confirmLabel,
@@ -348,7 +421,7 @@ internal fun ReminderPickerDialog(
     )
 
     AppDialogSurface(onDismissRequest = onDismiss) {
-        Text(stringResource(R.string.ui_reminder_dialog_title), style = MaterialTheme.typography.titleMedium, color = Ink)
+        Text(stringResource(R.string.ui_reminder_dialog_title), style = MaterialTheme.typography.headlineSmall, color = Ink)
         if (title.isNotBlank()) {
             Spacer(Modifier.height(4.dp))
             Text(
@@ -373,7 +446,7 @@ internal fun ReminderPickerDialog(
                 Surface(
                     onClick = { onSchedule(ms) },
                     color = Surface2,
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(10.dp),
                     border = BorderStroke(1.dp, Line),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -384,7 +457,11 @@ internal fun ReminderPickerDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(label, style = MaterialTheme.typography.bodyMedium, color = Ink, modifier = Modifier.weight(1f))
-                        Text(formatReminderWhen(ms), style = MaterialTheme.typography.labelSmall, color = BlueText)
+                        Text(
+                            formatReminderWhen(ms),
+                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = EditorialMono),
+                            color = BlueText
+                        )
                     }
                 }
             }

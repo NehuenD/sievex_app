@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -28,6 +29,10 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -38,7 +43,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -57,12 +62,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.sievex.app.AppLocale
 import com.sievex.app.Formats
 import com.sievex.app.LensArtifact
@@ -92,6 +100,9 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
+/**
+ * 2-column Bookshelf Book-Cover Grid for Spaces.
+ */
 @Composable
 internal fun SpacesScreen(
     spaces: List<Space>,
@@ -104,35 +115,79 @@ internal fun SpacesScreen(
     onDeleteRequest: (Space) -> Unit
 ) {
     val minuteTick = rememberMinuteTick()
-    LazyColumn(
-        Modifier
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        modifier = Modifier
             .fillMaxSize()
             .background(Canvas),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item(contentType = "header") {
-            Column {
-                ScreenHeader(stringResource(R.string.ui_tab_spaces), stringResource(R.string.ui_spaces_subtitle))
-                Row(Modifier.padding(horizontal = 20.dp)) {
-                    PillButton(stringResource(R.string.ui_space_new), SignalFill, Color.White, onNewSpace)
+        item(span = { GridItemSpan(2) }, contentType = "header") {
+            Column(Modifier.padding(top = 18.dp, bottom = 4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.ui_tab_spaces),
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = Ink
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = stringResource(R.string.ui_spaces_subtitle),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Ink2
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    PillButton(
+                        label = stringResource(R.string.ui_space_new),
+                        background = SignalFill,
+                        foreground = Color.White,
+                        onClick = onNewSpace
+                    )
                 }
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider(thickness = 1.dp, color = Line)
             }
         }
+
         if (spaces.isEmpty()) {
-            item(contentType = "empty") {
-                Text(
-                    stringResource(R.string.ui_spaces_empty),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Ink2,
-                    modifier = Modifier.padding(20.dp)
-                )
+            item(span = { GridItemSpan(2) }, contentType = "empty") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 32.dp, horizontal = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    EditorialArtwork(
+                        resId = R.drawable.art_onboard_2,
+                        contentDescription = null,
+                        modifier = Modifier.size(120.dp)
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        stringResource(R.string.ui_spaces_empty),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Ink2
+                    )
+                }
             }
-        }
-        items(spaces, key = { it.id }, contentType = { "space" }) { space ->
-            Box(Modifier.padding(horizontal = 20.dp)) {
-                SpaceRow(
+        } else {
+            itemsIndexed(spaces, key = { _, s -> s.id }, contentType = { _, _ -> "book_cover" }) { index, space ->
+                val spineColor = when (index % 4) {
+                    0 -> Signal
+                    1 -> Blue
+                    2 -> Mint
+                    else -> Amber
+                }
+                SpaceBookCoverCard(
                     space = space,
+                    spineColor = spineColor,
                     noteCount = noteCounts[space.id] ?: 0,
                     mediaCount = mediaCounts[space.id] ?: 0,
                     insight = insights[space.id],
@@ -143,14 +198,14 @@ internal fun SpacesScreen(
                 )
             }
         }
-        item(contentType = "spacer") { Spacer(Modifier.height(24.dp)) }
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SpaceRow(
+private fun SpaceBookCoverCard(
     space: Space,
+    spineColor: Color,
     noteCount: Int,
     mediaCount: Int,
     insight: LensArtifact?,
@@ -160,12 +215,16 @@ private fun SpaceRow(
     onDelete: () -> Unit
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(4.dp)
+
     Surface(
         color = Surface1,
-        shape = RoundedCornerShape(24.dp),
+        shape = shape,
+        border = BorderStroke(1.dp, Line),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
+            .height(172.dp)
+            .clip(shape)
             .combinedClickable(
                 onClickLabel = stringResource(R.string.ui_space_open_action),
                 onLongClickLabel = stringResource(R.string.ui_space_delete_confirm),
@@ -173,83 +232,166 @@ private fun SpaceRow(
                 onClick = onClick
             )
     ) {
-        Row(
-            Modifier.padding(start = 18.dp, top = 16.dp, bottom = 16.dp, end = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(Modifier.fillMaxSize()) {
+            // Crisp 6dp left colored book-spine edge band + engraved book crease
             Box(
                 Modifier
-                    .size(10.dp)
-                    .background(if (insight == null) Line else Signal, CircleShape)
+                    .width(6.dp)
+                    .fillMaxHeight()
+                    .background(spineColor)
             )
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    space.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Ink,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(4.dp))
-                val notesLabel = if (noteCount == 1) stringResource(R.string.ui_notes_count_one) else stringResource(R.string.ui_notes_count_many, noteCount)
-                val mediaLabel = when (mediaCount) {
-                    0 -> ""
-                    1 -> " · " + stringResource(R.string.ui_media_count_one)
-                    else -> " · " + stringResource(R.string.ui_media_count_many, mediaCount)
-                }
-                Text(
-                    notesLabel + mediaLabel,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Ink2
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Text(
-                if (insight == null) stringResource(R.string.ui_space_no_report) else stringResource(R.string.ui_space_report_age, relativeAge(insight.generatedAt, minuteTick)),
-                style = MaterialTheme.typography.labelSmall,
-                color = Ink2
+            Box(
+                Modifier
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(Ink.copy(alpha = if (IsDarkTheme) 0.08f else 0.06f))
             )
-            Box {
-                Surface(
-                    onClick = { menuOpen = true },
-                    color = Color.Transparent,
-                    shape = CircleShape,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Filled.MoreVert,
-                            contentDescription = stringResource(R.string.ui_action_more),
-                            tint = Ink2,
-                            modifier = Modifier.size(20.dp)
-                        )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .let { base ->
+                        if (IsDarkTheme) {
+                            base.background(Brush.horizontalGradient(listOf(spineColor.copy(alpha = 0.10f), Color.Transparent)))
+                        } else {
+                            base
+                        }
                     }
+                    .padding(start = 12.dp, end = 6.dp, top = 10.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Top genre header + overflow trigger
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.ui_spaces_folio_genre),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = EditorialMono,
+                                fontSize = 10.sp,
+                                letterSpacing = 1.4.sp
+                            ),
+                            color = spineColor,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Box {
+                            Surface(
+                                onClick = { menuOpen = true },
+                                color = Color.Transparent,
+                                shape = CircleShape,
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Filled.MoreVert,
+                                        contentDescription = stringResource(R.string.ui_action_more),
+                                        tint = Ink2,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                            DropdownMenu(
+                                expanded = menuOpen,
+                                onDismissRequest = { menuOpen = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.ui_action_edit), color = Ink) },
+                                    onClick = {
+                                        menuOpen = false
+                                        onEdit()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.ui_action_delete), color = Red) },
+                                    onClick = {
+                                        menuOpen = false
+                                        onDelete()
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = space.name,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontFamily = EditorialSerif,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            lineHeight = 22.sp
+                        ),
+                        color = Ink,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
-                DropdownMenu(
-                    expanded = menuOpen,
-                    onDismissRequest = { menuOpen = false }
+
+                // Colophon footer
+                Column(
+                    modifier = Modifier.padding(end = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.ui_action_edit), color = Ink) },
-                        onClick = {
-                            menuOpen = false
-                            onEdit()
-                        }
+                    HorizontalDivider(thickness = 1.dp, color = Line)
+                    Spacer(Modifier.height(2.dp))
+                    val notesLabel = if (noteCount == 1) {
+                        stringResource(R.string.ui_notes_count_one)
+                    } else {
+                        stringResource(R.string.ui_notes_count_many, noteCount)
+                    }
+                    val mediaLabel = when (mediaCount) {
+                        0 -> ""
+                        1 -> " · " + stringResource(R.string.ui_media_count_one)
+                        else -> " · " + stringResource(R.string.ui_media_count_many, mediaCount)
+                    }
+                    Text(
+                        text = notesLabel + mediaLabel,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = EditorialMono,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 10.sp
+                        ),
+                        color = Ink2,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.ui_action_delete), color = Red) },
-                        onClick = {
-                            menuOpen = false
-                            onDelete()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = if (insight == null) {
+                                stringResource(R.string.ui_space_no_report)
+                            } else {
+                                stringResource(R.string.ui_space_report_age, relativeAge(insight.generatedAt, minuteTick))
+                            },
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = Ink2,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (space.focusPrompt.isNotBlank()) {
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = stringResource(R.string.ui_space_focus_badge),
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                color = BlueText
+                            )
                         }
-                    )
+                    }
                 }
             }
         }
     }
 }
 
+/**
+ * Bound Chapter Volume view for a single Space:
+ * editorial Focus banner + [Margin Notes] / [Exhibits] toggle + clean bottom action pill.
+ */
 @Composable
 internal fun SpaceScreen(
     space: Space,
@@ -351,7 +493,6 @@ internal fun SpaceScreen(
                 }
                 LensService.RunState.FAILED -> {
                     if (runningLensId == wanted) runningLensId = null
-                    // Always surface regeneration errors even if an older artifact exists.
                     failedLensId = wanted
                 }
                 LensService.RunState.IDLE -> Unit
@@ -443,13 +584,21 @@ internal fun SpaceScreen(
             .systemBarsPadding()
             .imePadding()
     ) {
+        // Bound volume top bar
         Row(
-            Modifier.padding(start = 8.dp, end = 8.dp, top = 16.dp),
+            Modifier.padding(start = 8.dp, end = 8.dp, top = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             BackIconButton(onClick = onBack)
             Spacer(Modifier.width(4.dp))
-            Text(stringResource(R.string.ui_section_space), style = MaterialTheme.typography.labelSmall, color = Ink2)
+            Text(
+                stringResource(R.string.ui_spaces_folio_genre),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontFamily = EditorialMono,
+                    letterSpacing = 1.4.sp
+                ),
+                color = Ink2
+            )
             Spacer(Modifier.weight(1f))
             Box {
                 Surface(
@@ -488,7 +637,9 @@ internal fun SpaceScreen(
                 }
             }
         }
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
+
+        // Bound chapter title + colophon + Focus banner
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
             Text(
                 space.name,
                 style = MaterialTheme.typography.headlineMedium,
@@ -503,17 +654,27 @@ internal fun SpaceScreen(
                 1 -> " · " + stringResource(R.string.ui_media_count_one)
                 else -> " · " + stringResource(R.string.ui_media_count_many, spaceMedia.size)
             }
-            Text(notesSummary + mediaSummary, style = MaterialTheme.typography.bodySmall, color = Ink2)
+            Text(
+                notesSummary + mediaSummary,
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = EditorialMono),
+                color = Ink2
+            )
             if (space.description.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(6.dp))
                 Text(space.description, style = MaterialTheme.typography.bodySmall, color = Ink2)
             }
+            Spacer(Modifier.height(10.dp))
+            SpaceFocusStrip(
+                focusPrompt = space.focusPrompt,
+                onClick = { editingFocus = true }
+            )
         }
         Spacer(Modifier.height(12.dp))
-        // Clean 2-way segmented control: Context | Insights
+
+        // [Margin Notes] / [Exhibits] editorial segmented toggle
         Surface(
             color = Surface1,
-            shape = RoundedCornerShape(999.dp),
+            shape = RoundedCornerShape(8.dp),
             border = BorderStroke(1.dp, Line),
             modifier = Modifier
                 .fillMaxWidth()
@@ -525,19 +686,20 @@ internal fun SpaceScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 SpaceSegmentTab(
-                    label = stringResource(R.string.ui_space_context_subtab),
+                    label = stringResource(R.string.ui_space_margin_notes_tab),
                     selected = sub == 0,
                     onClick = { sub = 0 },
                     modifier = Modifier.weight(1f)
                 )
                 SpaceSegmentTab(
-                    label = stringResource(R.string.ui_space_insights_subtab),
+                    label = stringResource(R.string.ui_space_exhibits_tab),
                     selected = sub == 1,
                     onClick = { sub = 1 },
                     modifier = Modifier.weight(1f)
                 )
             }
         }
+
         if (importingMedia) {
             Spacer(Modifier.height(8.dp))
             LinearProgressIndicator(
@@ -548,7 +710,8 @@ internal fun SpaceScreen(
                 trackColor = Line
             )
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
+        HorizontalDivider(thickness = 1.dp, color = Line)
 
         Box(
             Modifier
@@ -558,8 +721,7 @@ internal fun SpaceScreen(
             if (sub == 0) {
                 LazyColumn(
                     Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 96.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    contentPadding = PaddingValues(bottom = 88.dp)
                 ) {
                     if (feedEntries.isEmpty()) {
                         item(contentType = "empty") {
@@ -586,30 +748,51 @@ internal fun SpaceScreen(
                             }
                         }
                     ) { entry ->
-                        Box(Modifier.padding(horizontal = 20.dp)) {
-                            when (entry) {
-                                is FeedEntry.NoteEntry -> NoteCard(entry.note, onClick = { onOpenNote(entry.note) })
-                                is FeedEntry.MediaEntry -> MediaCard(entry.media, onClick = { onOpenMedia(entry.media) })
+                        when (entry) {
+                            is FeedEntry.NoteEntry -> {
+                                EditorialNoteRow(entry.note, onClick = { onOpenNote(entry.note) })
+                                HorizontalDivider(thickness = 1.dp, color = Line)
+                            }
+                            is FeedEntry.MediaEntry -> {
+                                Box(Modifier.padding(horizontal = 20.dp, vertical = 10.dp)) {
+                                    MediaCard(entry.media, onClick = { onOpenMedia(entry.media) })
+                                }
+                                HorizontalDivider(thickness = 1.dp, color = Line)
                             }
                         }
                     }
                 }
 
+                // Clean bottom action pill for Margin Notes
                 Box(
                     modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(20.dp)
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 16.dp)
                 ) {
-                    FloatingActionButton(
+                    Surface(
                         onClick = { if (!importingMedia) addMenuOpen = true },
-                        containerColor = SignalFill,
-                        contentColor = Color.White,
-                        shape = CircleShape
+                        color = SignalFill,
+                        shape = RoundedCornerShape(999.dp),
+                        shadowElevation = 2.dp,
+                        modifier = Modifier.heightIn(min = 48.dp)
                     ) {
-                        Icon(
-                            Icons.Filled.Add,
-                            contentDescription = stringResource(R.string.ui_space_add_to_space)
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                stringResource(R.string.ui_space_add_to_space),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.White
+                            )
+                        }
                     }
                     DropdownMenu(
                         expanded = addMenuOpen,
@@ -637,17 +820,9 @@ internal fun SpaceScreen(
             } else {
                 LazyColumn(
                     Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 24.dp),
+                    contentPadding = PaddingValues(top = 12.dp, bottom = 88.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    item(contentType = "focus_strip") {
-                        Box(Modifier.padding(horizontal = 20.dp)) {
-                            SpaceFocusStrip(
-                                focusPrompt = space.focusPrompt,
-                                onClick = { editingFocus = true }
-                            )
-                        }
-                    }
                     item(contentType = "chips") {
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 20.dp),
@@ -690,11 +865,11 @@ internal fun SpaceScreen(
                             item(contentType = "error_banner") {
                                 Surface(
                                     color = Surface1,
-                                    shape = RoundedCornerShape(18.dp),
+                                    shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 20.dp)
-                                        .border(1.dp, Red.copy(alpha = 0.6f), RoundedCornerShape(18.dp))
+                                        .border(1.dp, Red.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
                                 ) {
                                     Row(
                                         Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -730,29 +905,20 @@ internal fun SpaceScreen(
                         if (lens != null) {
                             item(contentType = "actions") {
                                 Column(Modifier.padding(horizontal = 20.dp)) {
-                                    val busy = runningLensId != null
-                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    if (!lens.builtIn) {
                                         PillButton(
-                                            label = if (shown == null) stringResource(R.string.ui_lens_generate) else stringResource(R.string.ui_lens_regenerate),
-                                            background = if (busy || !hasReadableContext) Surface2 else SignalFill,
-                                            foreground = if (busy || !hasReadableContext) Ink2 else Color.White,
-                                            onClick = { generate(lens) },
-                                            enabled = !busy && hasReadableContext
+                                            label = stringResource(R.string.ui_lens_edit),
+                                            background = Surface1,
+                                            foreground = Ink,
+                                            border = BorderStroke(1.dp, Line),
+                                            onClick = {
+                                                creatingOrEditingLens = lens
+                                                showCustomLensDialog = true
+                                            }
                                         )
-                                        if (!lens.builtIn) {
-                                            PillButton(
-                                                label = stringResource(R.string.ui_lens_edit),
-                                                background = Surface2,
-                                                foreground = Ink,
-                                                onClick = {
-                                                    creatingOrEditingLens = lens
-                                                    showCustomLensDialog = true
-                                                }
-                                            )
-                                        }
+                                        Spacer(Modifier.height(10.dp))
                                     }
                                     if (runningLensId == lens.id) {
-                                        Spacer(Modifier.height(12.dp))
                                         LinearProgressIndicator(
                                             modifier = Modifier.fillMaxWidth(),
                                             color = Signal,
@@ -766,14 +932,12 @@ internal fun SpaceScreen(
                                         )
                                     }
                                     if (!hasReadableContext) {
-                                        Spacer(Modifier.height(10.dp))
                                         Text(
                                             stringResource(R.string.ui_lens_needs_notes),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = Ink2
                                         )
                                     } else if (stale) {
-                                        Spacer(Modifier.height(10.dp))
                                         Text(
                                             stringResource(R.string.ui_lens_stale_hint),
                                             style = MaterialTheme.typography.bodySmall,
@@ -783,6 +947,27 @@ internal fun SpaceScreen(
                                 }
                             }
                         }
+                    }
+                }
+
+                // Clean bottom action pill for Exhibits / Lenses
+                val activeLens = selectedLens
+                if (lensesLoaded && activeLens != null) {
+                    val busy = runningLensId != null
+                    val enabled = !busy && hasReadableContext
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 16.dp)
+                    ) {
+                        PillButton(
+                            label = if (shown == null) stringResource(R.string.ui_lens_generate) else stringResource(R.string.ui_lens_regenerate),
+                            background = if (enabled) SignalFill else Surface2,
+                            foreground = if (enabled) Color.White else Ink2,
+                            border = if (enabled) null else BorderStroke(1.dp, Line),
+                            enabled = enabled,
+                            onClick = { generate(activeLens) }
+                        )
                     }
                 }
             }
@@ -918,10 +1103,11 @@ private fun LensChip(
 ) {
     val name = lensName(spec)
     Surface(
-        color = if (selected) SignalSoft else Surface2,
+        color = if (selected) SignalSoft else Surface1,
         shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, if (selected) Signal.copy(alpha = 0.45f) else Line),
         modifier = Modifier
-            .heightIn(min = 48.dp)
+            .heightIn(min = 44.dp)
             .clip(RoundedCornerShape(999.dp))
             .combinedClickable(
                 onClickLabel = stringResource(R.string.ui_lens_show_action, name),
@@ -931,7 +1117,7 @@ private fun LensChip(
             )
     ) {
         Row(
-            Modifier.padding(start = 16.dp, end = if (selected) 8.dp else 16.dp, top = 12.dp, bottom = 12.dp),
+            Modifier.padding(start = 16.dp, end = if (selected) 8.dp else 16.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -951,7 +1137,7 @@ private fun LensChip(
                 Spacer(Modifier.width(4.dp))
                 Box(
                     Modifier
-                        .size(28.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .clickable { onManage() },
                     contentAlignment = Alignment.Center
@@ -972,15 +1158,14 @@ private fun LensChip(
 private fun AddLensChip(onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        color = Surface2,
+        color = Surface1,
         shape = RoundedCornerShape(999.dp),
-        modifier = Modifier
-            .heightIn(min = 48.dp)
-            .border(1.dp, Line, RoundedCornerShape(999.dp))
+        border = BorderStroke(1.dp, Line),
+        modifier = Modifier.heightIn(min = 44.dp)
     ) {
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
         ) {
             Text(stringResource(R.string.ui_lens_add_chip), style = MaterialTheme.typography.labelMedium, color = Ink)
         }
@@ -996,7 +1181,8 @@ private fun LensArtifactCard(
 ) {
     Surface(
         color = Surface1,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, Line),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(18.dp)) {
@@ -1053,7 +1239,7 @@ private fun LensArtifactCard(
                 Text(
                     if (artifact.covered.size == 1) stringResource(R.string.ui_lens_from_notes_one, age)
                     else stringResource(R.string.ui_lens_from_notes, artifact.covered.size, age),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = EditorialMono),
                     color = Ink2
                 )
             }
@@ -1088,7 +1274,11 @@ private fun MarkdownBody(markdown: String) {
                 )
             }
             when (block.kind) {
-                MdKind.H2 -> Text(block.text, style = MaterialTheme.typography.titleMedium, color = Ink)
+                MdKind.H2 -> Text(
+                    block.text,
+                    style = MaterialTheme.typography.titleMedium.copy(fontFamily = EditorialSerif),
+                    color = Ink
+                )
                 MdKind.H3 -> Text(block.text.uppercase(), style = MaterialTheme.typography.labelSmall, color = SignalText)
                 MdKind.BULLET -> Row {
                     Text("•", style = MaterialTheme.typography.bodyMedium, color = SignalText)
@@ -1223,16 +1413,20 @@ private fun SpaceSegmentTab(
     Surface(
         onClick = onClick,
         color = if (selected) SignalSoft else Color.Transparent,
-        shape = RoundedCornerShape(999.dp),
-        modifier = modifier.heightIn(min = 42.dp)
+        shape = RoundedCornerShape(6.dp),
+        border = if (selected) BorderStroke(1.dp, Signal.copy(alpha = 0.4f)) else null,
+        modifier = modifier.heightIn(min = 40.dp)
     ) {
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)
         ) {
             Text(
                 label,
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontFamily = EditorialSerif,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                ),
                 color = if (selected) SignalText else Ink2,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1250,14 +1444,14 @@ private fun SpaceFocusStrip(
     Surface(
         onClick = onClick,
         color = if (active) BlueSoft else Surface1,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(6.dp),
         border = BorderStroke(1.dp, if (active) Blue.copy(alpha = 0.42f) else Line),
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 48.dp)
+            .heightIn(min = 44.dp)
     ) {
         Row(
-            Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -1268,7 +1462,7 @@ private fun SpaceFocusStrip(
                         style = MaterialTheme.typography.labelSmall,
                         color = BlueText
                     )
-                    Spacer(Modifier.height(3.dp))
+                    Spacer(Modifier.height(2.dp))
                     Text(
                         focusPrompt,
                         style = MaterialTheme.typography.bodySmall,
@@ -1317,7 +1511,7 @@ private fun SpaceFocusDialog(
                 .heightIn(max = 480.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            Text(stringResource(R.string.ui_space_focus_title), style = MaterialTheme.typography.titleMedium, color = Ink)
+            Text(stringResource(R.string.ui_space_focus_title), style = MaterialTheme.typography.headlineSmall, color = Ink)
             Spacer(Modifier.height(6.dp))
             Text(stringResource(R.string.ui_space_focus_hint), style = MaterialTheme.typography.bodySmall, color = Ink2)
             Spacer(Modifier.height(14.dp))
@@ -1382,7 +1576,7 @@ internal fun SpaceEditorDialog(
                 .heightIn(max = 560.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            Text(stringResource(R.string.ui_space_edit_title), style = MaterialTheme.typography.titleMedium, color = Ink)
+            Text(stringResource(R.string.ui_space_edit_title), style = MaterialTheme.typography.headlineSmall, color = Ink)
             Spacer(Modifier.height(14.dp))
             EditorField(
                 stringResource(R.string.ui_section_name),
@@ -1457,7 +1651,7 @@ private fun LensPickerDialog(
     onDismiss: () -> Unit
 ) {
     AppDialogSurface(onDismissRequest = onDismiss) {
-        Text(stringResource(R.string.ui_lens_add), style = MaterialTheme.typography.titleMedium, color = Ink)
+        Text(stringResource(R.string.ui_lens_add), style = MaterialTheme.typography.headlineSmall, color = Ink)
         Spacer(Modifier.height(6.dp))
         Text(
             stringResource(R.string.ui_lens_picker_body),
@@ -1510,8 +1704,9 @@ private fun LensPickRow(spec: LensSpec, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(Surface2)
+            .border(1.dp, Line, RoundedCornerShape(8.dp))
             .clickable { onClick() }
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1531,7 +1726,7 @@ private fun LensPickRow(spec: LensSpec, onClick: () -> Unit) {
         }
         if (!spec.builtIn) {
             Spacer(Modifier.width(10.dp))
-            Text(stringResource(R.string.ui_lens_custom_badge), style = MaterialTheme.typography.labelSmall, color = Blue)
+            Text(stringResource(R.string.ui_lens_custom_badge), style = MaterialTheme.typography.labelSmall, color = BlueText)
         }
     }
 }
@@ -1578,7 +1773,7 @@ private fun CustomLensDialog(
         ) {
             Text(
                 stringResource(if (initial == null) R.string.ui_lens_custom_title else R.string.ui_lens_custom_edit_title),
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.headlineSmall,
                 color = Ink
             )
             Spacer(Modifier.height(6.dp))
@@ -1696,7 +1891,7 @@ private fun RemoveLensDialog(
     AppDialogSurface(onDismissRequest = onDismiss) {
         Text(
             stringResource(R.string.ui_lens_remove_title, lensName(spec)),
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.headlineSmall,
             color = Ink
         )
         Spacer(Modifier.height(10.dp))
@@ -1759,7 +1954,7 @@ private fun AddClipToSpaceDialog(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     stringResource(R.string.ui_share_text_title),
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.headlineSmall,
                     color = Ink,
                     modifier = Modifier.weight(1f)
                 )
@@ -1857,7 +2052,8 @@ private fun AddClipToSpaceDialog(
                                     fmt,
                                     AppLocale.modelLanguage(context),
                                     spaceName = spaceName,
-                                    spaceFocus = spaceFocus
+                                    spaceFocus = spaceFocus,
+                                    inputKind = Transform.InputKind.CLIP
                                 )
                                 val time = SimpleDateFormat("HH:mm", Locale.US).format(Date())
                                 val whenText = "Today $time"

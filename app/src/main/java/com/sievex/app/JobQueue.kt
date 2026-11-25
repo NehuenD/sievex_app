@@ -15,7 +15,9 @@ data class Job(
     /** Media items to link to the filed note once transcription + shaping finishes. */
     val mediaIds: List<String> = emptyList(),
     /** When non-null, append this transcribed burst as a follow-up to an existing note. */
-    val appendNoteId: Long? = null
+    val appendNoteId: Long? = null,
+    /** Optional playback provenance captured when a media pause triggered the burst. */
+    val sourceLabel: String = ""
 )
 
 /**
@@ -115,7 +117,8 @@ object JobQueue {
                             .takeIf { candidate -> NoteFormat.entries.any { it.id == candidate } }
                             ?: NoteFormat.NOTE.id,
                         mediaIds = mediaIds,
-                        appendNoteId = o.optLong("appendNoteId", 0L).takeIf { it > 0L }
+                        appendNoteId = o.optLong("appendNoteId", 0L).takeIf { it > 0L },
+                        sourceLabel = o.optString("sourceLabel").trim()
                     )
                 )
             }
@@ -155,6 +158,7 @@ object JobQueue {
                         put("format", j.format)
                         if (j.mediaIds.isNotEmpty()) put("mediaIds", JSONArray(j.mediaIds))
                         if (j.appendNoteId != null) put("appendNoteId", j.appendNoteId)
+                        if (j.sourceLabel.isNotBlank()) put("sourceLabel", j.sourceLabel)
                     }
                 )
             }

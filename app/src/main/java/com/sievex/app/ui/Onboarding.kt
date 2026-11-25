@@ -2,6 +2,7 @@ package com.sievex.app.ui
 
 import android.content.Context
 import androidx.activity.compose.BackHandler
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateDpAsState
@@ -9,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,6 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -46,18 +49,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.sievex.app.R
 import kotlinx.coroutines.launch
 
-/** One page of the first-run flow: what it says, and what the primary button offers. */
+/** One page of the first-run flow: what it says, its artwork, and what the primary button offers. */
 private data class OnboardingStep(
+    val plateLabel: String,
+    @DrawableRes val artRes: Int,
     @StringRes val heading: Int,
     @StringRes val body: Int,
     @StringRes val action: Int,
@@ -66,16 +74,22 @@ private data class OnboardingStep(
 
 private val onboardingSteps = listOf(
     OnboardingStep(
+        plateLabel = "FOLIO I",
+        artRes = R.drawable.art_onboard_1,
         heading = R.string.sys_onboarding_step1_title,
         body = R.string.sys_onboarding_step1_body,
         action = R.string.sys_onboarding_action_continue
     ),
     OnboardingStep(
+        plateLabel = "FOLIO II",
+        artRes = R.drawable.art_onboard_2,
         heading = R.string.sys_onboarding_step2_title,
         body = R.string.sys_onboarding_step2_body,
         action = R.string.sys_onboarding_action_continue
     ),
     OnboardingStep(
+        plateLabel = "FOLIO III",
+        artRes = R.drawable.art_onboard_3,
         heading = R.string.sys_onboarding_step3_title,
         body = R.string.sys_onboarding_step3_body,
         action = R.string.sys_onboarding_action_get_started,
@@ -84,7 +98,7 @@ private val onboardingSteps = listOf(
 )
 
 /**
- * First-run flow: three swipeable pages with fixed header chrome and contextual permission priming.
+ * First-run flow: three swipeable editorial plates with fixed masthead chrome and contextual permission priming.
  */
 @Composable
 fun OnboardingScreen(onDone: () -> Unit) {
@@ -110,7 +124,6 @@ fun OnboardingScreen(onDone: () -> Unit) {
             .background(Canvas)
             .systemBarsPadding()
     ) {
-        // Fixed 56dp height keeps vertical layout completely steady on Step 3 when Skip hides.
         Row(
             Modifier
                 .fillMaxWidth()
@@ -118,22 +131,15 @@ fun OnboardingScreen(onDone: () -> Unit) {
                 .padding(start = 24.dp, end = 20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                Modifier
-                    .size(8.dp)
-                    .background(Signal, CircleShape)
-            )
+            InkvoxMark(size = 22.dp)
             Spacer(Modifier.width(8.dp))
-            Text(
-                stringResource(R.string.app_name),
-                style = MaterialTheme.typography.labelSmall,
-                color = Ink2
-            )
+            InkvoxWordmark(height = 21.dp)
             Spacer(Modifier.weight(1f))
             if (step < onboardingSteps.lastIndex) {
                 SkipButton(onClick = finish)
             }
         }
+        HorizontalDivider(thickness = 1.dp, color = Line)
 
         HorizontalPager(
             state = pagerState,
@@ -146,19 +152,28 @@ fun OnboardingScreen(onDone: () -> Unit) {
                 Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp),
+                    .padding(horizontal = 24.dp, vertical = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                OnboardingMark(step = index)
-                Spacer(Modifier.height(30.dp))
+                OnboardingPlate(step = index, page = page)
+                Spacer(Modifier.height(28.dp))
                 Column(Modifier.fillMaxWidth()) {
+                    Text(
+                        page.plateLabel,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = EditorialMono,
+                            letterSpacing = 1.4.sp
+                        ),
+                        color = SignalText
+                    )
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         stringResource(page.heading),
                         style = MaterialTheme.typography.headlineMedium,
                         color = Ink
                     )
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(10.dp))
                     Text(
                         stringResource(page.body),
                         style = MaterialTheme.typography.bodyLarge,
@@ -168,10 +183,9 @@ fun OnboardingScreen(onDone: () -> Unit) {
                         Spacer(Modifier.height(16.dp))
                         Surface(
                             color = Surface1,
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(1.dp, Line, RoundedCornerShape(16.dp))
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, Line),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
                                 stringResource(page.footnote),
@@ -191,7 +205,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
                 scope.launch { pagerState.animateScrollToPage(target) }
             }
         )
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(10.dp))
 
         Row(
             Modifier
@@ -203,7 +217,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
                 BackButton {
                     scope.launch { pagerState.animateScrollToPage(step - 1) }
                 }
-                Spacer(Modifier.width(14.dp))
+                Spacer(Modifier.width(12.dp))
             }
             PrimaryAction(
                 label = stringResource(onboardingSteps[step].action),
@@ -220,118 +234,63 @@ fun OnboardingScreen(onDone: () -> Unit) {
     }
 }
 
-/** Step-distinct geometric emblem rendered cleanly with shapes at any density. */
+/** Framed editorial risograph plate rendering custom artwork adapted cleanly to light or dark mode. */
 @Composable
-private fun OnboardingMark(step: Int) {
+private fun OnboardingPlate(step: Int, page: OnboardingStep) {
     val accent = when (step) {
         1 -> Blue
         2 -> Mint
         else -> Signal
     }
-    val softFill = when (step) {
-        1 -> Color(0xFF172638)
-        2 -> Color(0xFF152D29)
+    val plateTint = when (step) {
+        1 -> BlueSoft
+        2 -> MintSoft
         else -> SignalSoft
     }
+    val plateModifier = if (IsDarkTheme) {
+        Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(6.dp))
+            .background(Brush.verticalGradient(listOf(plateTint.copy(alpha = 0.85f), Surface1)))
+            .border(1.dp, accent.copy(alpha = 0.36f), RoundedCornerShape(6.dp))
+            .padding(16.dp)
+    } else {
+        Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(6.dp))
+            .background(plateTint.copy(alpha = 0.55f))
+            .border(1.dp, accent.copy(alpha = 0.28f), RoundedCornerShape(6.dp))
+            .padding(16.dp)
+    }
 
-    Box(
-        Modifier.size(196.dp),
-        contentAlignment = Alignment.Center
+    Surface(
+        color = Surface1,
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, if (IsDarkTheme) LineStrong else Line),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(228.dp)
     ) {
         Box(
-            Modifier
-                .size(196.dp)
-                .border(1.dp, Line.copy(alpha = 0.35f), CircleShape)
-        )
-        Box(
-            Modifier
-                .size(160.dp)
-                .clip(CircleShape)
-                .background(Surface1)
-                .border(1.dp, Line.copy(alpha = 0.6f), CircleShape),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
             contentAlignment = Alignment.Center
         ) {
             Box(
-                Modifier
-                    .size(88.dp)
-                    .clip(CircleShape)
-                    .background(softFill)
-                    .border(1.dp, accent.copy(alpha = 0.45f), CircleShape),
+                modifier = plateModifier,
                 contentAlignment = Alignment.Center
             ) {
                 AnimatedContent(
-                    targetState = step,
-                    transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) },
-                    label = "onboarding mark"
-                ) { page ->
-                    when (page) {
-                        0 -> {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Box(
-                                    Modifier
-                                        .width(18.dp)
-                                        .height(34.dp)
-                                        .clip(RoundedCornerShape(999.dp))
-                                        .background(Signal)
-                                )
-                                Spacer(Modifier.height(3.dp))
-                                Box(
-                                    Modifier
-                                        .width(2.dp)
-                                        .height(8.dp)
-                                        .background(Signal.copy(alpha = 0.7f))
-                                )
-                                Spacer(Modifier.height(3.dp))
-                                Box(
-                                    Modifier
-                                        .width(13.dp)
-                                        .height(2.dp)
-                                        .clip(RoundedCornerShape(999.dp))
-                                        .background(Signal.copy(alpha = 0.85f))
-                                )
-                            }
-                        }
-                        1 -> {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Box(
-                                    Modifier
-                                        .width(20.dp)
-                                        .height(16.dp)
-                                        .border(2.5.dp, Blue, RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
-                                )
-                                Box(
-                                    Modifier
-                                        .width(30.dp)
-                                        .height(22.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Blue),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Box(
-                                        Modifier
-                                            .size(6.dp)
-                                            .clip(CircleShape)
-                                            .background(Canvas)
-                                    )
-                                }
-                            }
-                        }
-                        else -> {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Box(Modifier.size(16.dp).clip(RoundedCornerShape(5.dp)).background(Mint))
-                                    Box(Modifier.size(16.dp).clip(CircleShape).background(Mint.copy(alpha = 0.45f)))
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Box(Modifier.size(16.dp).clip(CircleShape).background(Mint.copy(alpha = 0.45f)))
-                                    Box(Modifier.size(16.dp).clip(RoundedCornerShape(5.dp)).background(Mint))
-                                }
-                            }
-                        }
-                    }
+                    targetState = page.artRes,
+                    transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(140)) },
+                    label = "onboarding artwork"
+                ) { resId ->
+                    EditorialArtwork(
+                        resId = resId,
+                        contentDescription = stringResource(page.heading),
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
             }
         }
@@ -355,7 +314,7 @@ private fun StepIndicator(index: Int, onSelect: (Int) -> Unit) {
         onboardingSteps.indices.forEach { i ->
             val current = i == index
             val capsuleWidth by animateDpAsState(
-                targetValue = if (current) 22.dp else 8.dp,
+                targetValue = if (current) 24.dp else 8.dp,
                 animationSpec = tween(200),
                 label = "step capsule"
             )
@@ -368,7 +327,7 @@ private fun StepIndicator(index: Int, onSelect: (Int) -> Unit) {
             ) {
                 Box(
                     Modifier
-                        .size(width = capsuleWidth, height = 8.dp)
+                        .size(width = capsuleWidth, height = 6.dp)
                         .clip(CircleShape)
                         .background(if (current) Signal else Line)
                 )
@@ -404,9 +363,8 @@ private fun BackButton(onClick: () -> Unit) {
         onClick = onClick,
         color = Surface2,
         shape = CircleShape,
-        modifier = Modifier
-            .size(54.dp)
-            .border(1.dp, Line.copy(alpha = 0.6f), CircleShape)
+        border = BorderStroke(1.dp, Line),
+        modifier = Modifier.size(54.dp)
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(

@@ -336,7 +336,8 @@ class CaptureService : Service() {
         why: String,
         mediaIds: List<String> = emptyList(),
         spaceId: String? = null,
-        appendNoteId: Long? = null
+        appendNoteId: Long? = null,
+        sourceLabel: String = ""
     ) {
         if (recording) return
         if (!armed) {
@@ -348,8 +349,9 @@ class CaptureService : Service() {
         val snapshotMediaIds = mediaIds
         val snapshotSpaceId = spaceId
         val snapshotAppendNoteId = appendNoteId
+        val snapshotSourceLabel = sourceLabel.trim()
         val next = BurstRecorder(this) { file ->
-            processBurst(file, snapshotFormat, snapshotMediaIds, snapshotSpaceId, snapshotAppendNoteId)
+            processBurst(file, snapshotFormat, snapshotMediaIds, snapshotSpaceId, snapshotAppendNoteId, snapshotSourceLabel)
         }
         recorder = next
         // Set before the capture thread starts: a recorder that dies on its first read invokes
@@ -408,10 +410,11 @@ class CaptureService : Service() {
         format: String,
         mediaIds: List<String>,
         spaceId: String?,
-        appendNoteId: Long? = null
+        appendNoteId: Long? = null,
+        sourceLabel: String = ""
     ) {
         try {
-            processBurstNow(file, format, mediaIds, spaceId, appendNoteId)
+            processBurstNow(file, format, mediaIds, spaceId, appendNoteId, sourceLabel)
         } finally {
             // The burst is on disk or already queued; either way this recorder thread is done, and
             // that is what makes a pending release safe.
@@ -424,7 +427,8 @@ class CaptureService : Service() {
         format: String,
         mediaIds: List<String>,
         spaceId: String?,
-        appendNoteId: Long? = null
+        appendNoteId: Long? = null,
+        sourceLabel: String = ""
     ) {
         // The recorder caps a burst at 90 s and stops itself, which bypasses stopBurst(). Without
         // this the service would believe it is still recording: the next pause would be ignored
@@ -468,7 +472,8 @@ class CaptureService : Service() {
             attempts = 0,
             format = format,
             mediaIds = mediaIds,
-            appendNoteId = appendNoteId
+            appendNoteId = appendNoteId,
+            sourceLabel = sourceLabel
         )
         JobQueue.add(job)
         CaptureLog.add("queued ${file.name}${job.spaceId?.let { " into $it" } ?: ""}")
@@ -685,7 +690,9 @@ class CaptureService : Service() {
             format,
             AppLocale.modelLanguage(this),
             spaceName = spaceName,
-            spaceFocus = spaceFocus
+            spaceFocus = spaceFocus,
+            inputKind = Transform.InputKind.VOICE,
+            sourceContext = job.sourceLabel
         ) { phase ->
             Pipeline.transformingStep(phase)
         }
@@ -710,8 +717,7 @@ class CaptureService : Service() {
                 questionDrafts = structured.questionDrafts
             )
         } else {
-            val words = text.split(WHITESPACE_REGEX).filter { it.isNotBlank() }
-            val title = words.take(9).joinToString(" ").trimEnd('.', ',', ';', ':')
+            val title = Transform.deriveTitle("", text)
             CaptureLog.add("transform unavailable, filing raw transcript")
             StoredNote(
                 id = NoteStore.nextId(),
@@ -896,7 +902,6 @@ class CaptureService : Service() {
         }
 
         private val releaseInFlight = AtomicBoolean(false)
-        private val WHITESPACE_REGEX = Regex("\\s+")
 
         /** True once the worker has loaded jobs.json, so [kick] can answer without touching disk. */
         @Volatile
@@ -1008,13 +1013,13 @@ class CaptureService : Service() {
         }
 
         /** Called from the media listener, which runs in the same process. */
-        fun trigger(start: Boolean, why: String) {
+        fun trigger(start: Boolean, why: String, sourceLabel: String = "") {
             val svc = instance
             if (svc == null) {
                 CaptureLog.add("trigger dropped, service not running ($why)")
                 return
             }
-            if (start) svc.startBurst(why) else svc.stopBurst()
+            if (start) svc.startBurst(why, sourceLabel = sourceLabel) else svc.stopBurst()
         }
     }
 }

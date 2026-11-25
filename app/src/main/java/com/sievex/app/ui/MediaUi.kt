@@ -3,6 +3,7 @@ package com.sievex.app.ui
 import android.content.ClipData
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -29,7 +30,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -40,6 +40,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -55,6 +56,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -67,9 +69,11 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
@@ -141,20 +145,21 @@ internal fun MediaCard(
     Surface(
         onClick = onClick,
         color = Surface1,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, Line),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(72.dp)
-                    .clip(RoundedCornerShape(14.dp))
+                    .size(68.dp)
+                    .clip(RoundedCornerShape(6.dp))
                     .background(Surface2)
-                    .border(1.dp, Line, RoundedCornerShape(14.dp)),
+                    .border(1.dp, Line, RoundedCornerShape(6.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 val bmp = thumb
@@ -177,7 +182,7 @@ internal fun MediaCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = media.caption.ifBlank { stringResource(R.string.ui_media_no_caption) },
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = EditorialSerif),
                     color = if (media.caption.isBlank()) Ink2 else Ink,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -188,7 +193,11 @@ internal fun MediaCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (whenLabel.isNotBlank()) {
-                        Text(whenLabel, style = MaterialTheme.typography.labelSmall, color = Ink2)
+                        Text(
+                            whenLabel,
+                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = EditorialMono),
+                            color = Ink2
+                        )
                     }
                     if (media.noteIds.isNotEmpty()) {
                         val linksText = if (media.noteIds.size == 1) {
@@ -257,9 +266,9 @@ private fun NoteMediaThumb(
     Box(
         modifier = Modifier
             .size(88.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(Surface2)
-            .border(1.dp, Line, RoundedCornerShape(14.dp))
+            .border(1.dp, Line, RoundedCornerShape(8.dp))
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
@@ -282,6 +291,11 @@ private fun NoteMediaThumb(
     }
 }
 
+/**
+ * Clean editorial gallery plate viewer: top caption/close header, zoomable image,
+ * collapsible AI Summary / OCR plate notes, and streamlined single bottom bar
+ * (AI Summary toggle, OCR, To Note, Link, More).
+ */
 @Composable
 internal fun MediaViewerDialog(
     media: MediaItem,
@@ -300,6 +314,7 @@ internal fun MediaViewerDialog(
     var scale by remember(media.id) { mutableFloatStateOf(1f) }
     var offset by remember(media.id) { mutableStateOf(Offset.Zero) }
     var viewportSize by remember(media.id) { mutableStateOf(IntSize.Zero) }
+    var showSummaryPanel by remember(media.id) { mutableStateOf(false) }
     var editingCaption by remember(media.id) { mutableStateOf(false) }
     var captionDraft by remember(media.id, media.caption) { mutableStateOf(media.caption) }
     var linkingNotes by remember(media.id) { mutableStateOf(false) }
@@ -339,7 +354,8 @@ internal fun MediaViewerDialog(
                         chosenFormat,
                         AppLocale.modelLanguage(context),
                         spaceName = spaceName,
-                        spaceFocus = spaceFocus
+                        spaceFocus = spaceFocus,
+                        inputKind = Transform.InputKind.OCR
                     )
                 } else {
                     Transform.apply(
@@ -348,7 +364,8 @@ internal fun MediaViewerDialog(
                         NoteFormat.PLAIN,
                         AppLocale.modelLanguage(context),
                         spaceName = spaceName,
-                        spaceFocus = spaceFocus
+                        spaceFocus = spaceFocus,
+                        inputKind = Transform.InputKind.OCR
                     )
                 }
                 val time = SimpleDateFormat("HH:mm", Locale.US).format(Date())
@@ -430,17 +447,17 @@ internal fun MediaViewerDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.72f))
+                .background(Color.Black.copy(alpha = 0.78f))
                 .clickable(enabled = !actionBusy) { onDismiss() }
-                .padding(horizontal = 16.dp, vertical = 20.dp),
+                .padding(horizontal = 14.dp, vertical = 18.dp),
             contentAlignment = Alignment.Center
         ) {
             Surface(
                 color = Surface1,
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, Line),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, Line, RoundedCornerShape(24.dp))
                     .clickable(enabled = false) {}
             ) {
                 Column(
@@ -448,148 +465,57 @@ internal fun MediaViewerDialog(
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
                 ) {
-                    // Top action bar: accessible 48dp Close + optional OCR status + MoreVert overflow
+                    // Editorial top plate header: caption + OCR status + close
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 6.dp, vertical = 6.dp),
+                            .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        CloseIconButton(
-                            onClick = onDismiss,
-                            contentDescription = stringResource(R.string.ui_action_close),
-                            enabled = !actionBusy
-                        )
-                        Spacer(Modifier.weight(1f))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.ui_media_plate_kicker),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = EditorialMono,
+                                    letterSpacing = 1.2.sp
+                                ),
+                                color = BlueText
+                            )
+                            Text(
+                                text = media.caption.ifBlank { stringResource(R.string.ui_media_no_caption) },
+                                style = MaterialTheme.typography.titleMedium.copy(fontFamily = EditorialSerif),
+                                color = if (media.caption.isBlank()) Ink2 else Ink,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.clickable(enabled = !actionBusy) {
+                                    captionDraft = media.caption
+                                    editingCaption = true
+                                }
+                            )
+                        }
                         if (scanningOcr && media.ocrText.isBlank()) {
                             Text(
                                 stringResource(R.string.ui_media_ocr_scanning),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Ink2,
-                                modifier = Modifier.padding(end = 8.dp)
+                                modifier = Modifier.padding(end = 4.dp)
                             )
                         }
-                        Box {
-                            Surface(
-                                onClick = { if (!actionBusy) menuOpen = true },
-                                enabled = !actionBusy,
-                                color = Color.Transparent,
-                                shape = CircleShape,
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Filled.MoreVert,
-                                        contentDescription = stringResource(R.string.ui_action_more),
-                                        tint = Ink,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                            DropdownMenu(
-                                expanded = menuOpen,
-                                onDismissRequest = { menuOpen = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.ui_media_edit_caption), color = Ink) },
-                                    onClick = {
-                                        menuOpen = false
-                                        captionDraft = media.caption
-                                        editingCaption = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            if (media.noteIds.isEmpty()) stringResource(R.string.ui_media_link_notes)
-                                            else "${stringResource(R.string.ui_media_link_notes)} (${media.noteIds.size})",
-                                            color = Ink
-                                        )
-                                    },
-                                    onClick = {
-                                        menuOpen = false
-                                        linkingNotes = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            when {
-                                                media.ocrText.isNotBlank() -> stringResource(R.string.ui_media_ocr_label)
-                                                scanningOcr -> stringResource(R.string.ui_media_ocr_scanning)
-                                                else -> stringResource(R.string.ui_media_ocr_none)
-                                            },
-                                            color = if (media.ocrText.isNotBlank()) Ink else Ink2
-                                        )
-                                    },
-                                    enabled = media.ocrText.isNotBlank(),
-                                    onClick = {
-                                        menuOpen = false
-                                        viewingOcr = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            if (reminder != null) {
-                                                stringResource(R.string.ui_reminder_chip_active, formatReminderWhen(reminder.triggerAtMs))
-                                            } else {
-                                                stringResource(R.string.ui_reminder_chip_set)
-                                            },
-                                            color = if (reminder != null) BlueText else Ink
-                                        )
-                                    },
-                                    onClick = {
-                                        menuOpen = false
-                                        pickingReminder = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.ui_media_share), color = Ink) },
-                                    onClick = {
-                                        menuOpen = false
-                                        val file = MediaStore.resolveFile(media.file)
-                                        if (file == null || !file.isFile) {
-                                            Toast.makeText(context, R.string.ui_media_share_failed, Toast.LENGTH_SHORT).show()
-                                            return@DropdownMenuItem
-                                        }
-                                        runCatching {
-                                            val uri = FileProvider.getUriForFile(
-                                                context,
-                                                "${context.packageName}.fileprovider",
-                                                file
-                                            )
-                                            val share = Intent(Intent.ACTION_SEND).apply {
-                                                type = "image/*"
-                                                putExtra(Intent.EXTRA_STREAM, uri)
-                                                clipData = ClipData.newRawUri(null, uri)
-                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                            }
-                                            context.startActivity(Intent.createChooser(share, null))
-                                        }.onFailure { e ->
-                                            CaptureLog.add("media: share failed - ${e.message}")
-                                            Toast.makeText(context, R.string.ui_media_share_failed, Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.ui_media_delete_confirm), color = Red) },
-                                    onClick = {
-                                        menuOpen = false
-                                        confirmingDelete = true
-                                    }
-                                )
-                            }
-                        }
+                        CloseIconButton(
+                            onClick = onDismiss,
+                            contentDescription = stringResource(R.string.ui_action_close),
+                            enabled = !actionBusy
+                        )
                     }
+                    HorizontalDivider(thickness = 1.dp, color = Line)
 
-                    // Image preview area (pinch-zoom + double-tap + zoom reset pill)
+                    // Zoomable plate image area
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 200.dp, max = 420.dp)
-                            .padding(horizontal = 12.dp)
-                            .clip(RoundedCornerShape(14.dp))
+                            .heightIn(min = 210.dp, max = 420.dp)
+                            .padding(12.dp)
+                            .clip(RoundedCornerShape(6.dp))
                             .background(Color.Black)
                             .onSizeChanged { viewportSize = it }
                             .pointerInput(media.id) {
@@ -654,13 +580,13 @@ internal fun MediaViewerDialog(
                                 Icon(
                                     Icons.Filled.Warning,
                                     contentDescription = stringResource(R.string.ui_media_missing),
-                                    tint = Ink2,
+                                    tint = Color.White.copy(alpha = 0.7f),
                                     modifier = Modifier.size(28.dp)
                                 )
                                 Text(
                                     stringResource(R.string.ui_media_missing),
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Ink2
+                                    color = Color.White.copy(alpha = 0.7f)
                                 )
                             }
                         }
@@ -680,67 +606,90 @@ internal fun MediaViewerDialog(
                                 Text(
                                     stringResource(R.string.ui_media_zoom_reset, String.format(Locale.US, "%.1f×", scale)),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Ink,
+                                    color = Color.White,
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                 )
                             }
                         }
                     }
 
-                    // Caption + compact metadata + primary actions (at most 2 clean buttons)
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            text = media.caption.ifBlank { stringResource(R.string.ui_media_no_caption) },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (media.caption.isBlank()) Ink2 else Ink,
-                            maxLines = 4,
-                            overflow = TextOverflow.Ellipsis,
+                    // Expandable AI Summary / Plate colophon panel
+                    AnimatedVisibility(visible = showSummaryPanel) {
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable(enabled = !actionBusy) {
-                                    captionDraft = media.caption
-                                    editingCaption = true
-                                }
-                        )
-                        if (media.noteIds.isNotEmpty() || reminder != null) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Surface(
+                                color = Surface2,
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, Line),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                if (media.noteIds.isNotEmpty()) {
-                                    val linksText = if (media.noteIds.size == 1) {
-                                        stringResource(R.string.ui_media_links_one)
-                                    } else {
-                                        stringResource(R.string.ui_media_links_many, media.noteIds.size)
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.ui_media_summary_toggle).uppercase(),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = BlueText
+                                    )
+                                    Text(
+                                        text = media.caption.ifBlank { stringResource(R.string.ui_media_no_caption) },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (media.caption.isBlank()) Ink2 else Ink
+                                    )
+                                    if (media.ocrText.isNotBlank()) {
+                                        Text(
+                                            text = media.ocrText.trim(),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Ink2,
+                                            maxLines = 4,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
-                                    Text(
-                                        text = linksText,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = SignalText,
-                                        modifier = Modifier.clickable(enabled = !actionBusy) { linkingNotes = true }
-                                    )
-                                }
-                                if (reminder != null) {
-                                    Text(
-                                        text = if (media.noteIds.isNotEmpty()) {
-                                            "· ${stringResource(R.string.ui_reminder_chip_active, formatReminderWhen(reminder.triggerAtMs))}"
-                                        } else {
-                                            stringResource(R.string.ui_reminder_chip_active, formatReminderWhen(reminder.triggerAtMs))
-                                        },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = BlueText,
-                                        modifier = Modifier.clickable(enabled = !actionBusy) { pickingReminder = true }
-                                    )
+                                    if (media.noteIds.isNotEmpty() || reminder != null) {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            if (media.noteIds.isNotEmpty()) {
+                                                val linksText = if (media.noteIds.size == 1) {
+                                                    stringResource(R.string.ui_media_links_one)
+                                                } else {
+                                                    stringResource(R.string.ui_media_links_many, media.noteIds.size)
+                                                }
+                                                Text(
+                                                    text = linksText,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = SignalText,
+                                                    modifier = Modifier.clickable(enabled = !actionBusy) { linkingNotes = true }
+                                                )
+                                            }
+                                            if (reminder != null) {
+                                                Text(
+                                                    text = stringResource(R.string.ui_reminder_chip_active, formatReminderWhen(reminder.triggerAtMs)),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = BlueText,
+                                                    modifier = Modifier.clickable(enabled = !actionBusy) { pickingReminder = true }
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
-                        if (shapingNote) {
+                    }
+
+                    if (shapingNote) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
                             LinearProgressIndicator(
                                 modifier = Modifier.fillMaxWidth(),
                                 color = Blue,
@@ -752,33 +701,141 @@ internal fun MediaViewerDialog(
                                 color = BlueText
                             )
                         }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (hasShapeableText) {
-                                PillButton(
-                                    label = stringResource(R.string.ui_media_shape_note),
-                                    background = BlueSoft,
-                                    foreground = BlueText,
-                                    border = BorderStroke(1.dp, Blue.copy(alpha = 0.44f)),
-                                    enabled = !actionBusy,
-                                    onClick = { pickingShapeFormat = true },
-                                    modifier = Modifier.weight(1f)
+                    }
+
+                    HorizontalDivider(thickness = 1.dp, color = Line)
+
+                    // Streamlined single bottom bar: AI Summary toggle, OCR, To Note, Link, More
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        PlateBarButton(
+                            label = stringResource(R.string.ui_media_summary_toggle),
+                            active = showSummaryPanel,
+                            enabled = !actionBusy,
+                            onClick = { showSummaryPanel = !showSummaryPanel },
+                            modifier = Modifier.weight(1f)
+                        )
+                        PlateBarButton(
+                            label = stringResource(R.string.ui_media_ocr_short),
+                            active = false,
+                            enabled = !actionBusy && media.ocrText.isNotBlank(),
+                            onClick = { viewingOcr = true },
+                            modifier = Modifier.weight(0.85f)
+                        )
+                        PlateBarButton(
+                            label = stringResource(R.string.ui_media_to_note_short),
+                            active = hasShapeableText,
+                            accentSignal = true,
+                            enabled = !actionBusy && hasShapeableText,
+                            onClick = { pickingShapeFormat = true },
+                            modifier = Modifier.weight(1f)
+                        )
+                        PlateBarButton(
+                            label = if (media.noteIds.isEmpty()) {
+                                stringResource(R.string.ui_media_link_short)
+                            } else {
+                                "${stringResource(R.string.ui_media_link_short)} (${media.noteIds.size})"
+                            },
+                            active = media.noteIds.isNotEmpty(),
+                            enabled = !actionBusy,
+                            onClick = { linkingNotes = true },
+                            modifier = Modifier.weight(0.95f)
+                        )
+                        Box {
+                            Surface(
+                                onClick = { if (!actionBusy) menuOpen = true },
+                                enabled = !actionBusy,
+                                color = Surface2,
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, Line),
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Filled.MoreVert,
+                                        contentDescription = stringResource(R.string.ui_action_more),
+                                        tint = Ink,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            DropdownMenu(
+                                expanded = menuOpen,
+                                onDismissRequest = { menuOpen = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.ui_media_voice_note), color = SignalText) },
+                                    onClick = {
+                                        menuOpen = false
+                                        onDismiss()
+                                        onStartVoiceNote(media)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.ui_media_edit_caption), color = Ink) },
+                                    onClick = {
+                                        menuOpen = false
+                                        captionDraft = media.caption
+                                        editingCaption = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            if (reminder != null) {
+                                                stringResource(R.string.ui_reminder_chip_active, formatReminderWhen(reminder.triggerAtMs))
+                                            } else {
+                                                stringResource(R.string.ui_reminder_chip_set)
+                                            },
+                                            color = if (reminder != null) BlueText else Ink
+                                        )
+                                    },
+                                    onClick = {
+                                        menuOpen = false
+                                        pickingReminder = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.ui_media_share), color = Ink) },
+                                    onClick = {
+                                        menuOpen = false
+                                        val file = MediaStore.resolveFile(media.file)
+                                        if (file == null || !file.isFile) {
+                                            Toast.makeText(context, R.string.ui_media_share_failed, Toast.LENGTH_SHORT).show()
+                                            return@DropdownMenuItem
+                                        }
+                                        runCatching {
+                                            val uri = FileProvider.getUriForFile(
+                                                context,
+                                                "${context.packageName}.fileprovider",
+                                                file
+                                            )
+                                            val share = Intent(Intent.ACTION_SEND).apply {
+                                                type = "image/*"
+                                                putExtra(Intent.EXTRA_STREAM, uri)
+                                                clipData = ClipData.newRawUri(null, uri)
+                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            }
+                                            context.startActivity(Intent.createChooser(share, null))
+                                        }.onFailure { e ->
+                                            CaptureLog.add("media: share failed - ${e.message}")
+                                            Toast.makeText(context, R.string.ui_media_share_failed, Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.ui_media_delete_confirm), color = Red) },
+                                    onClick = {
+                                        menuOpen = false
+                                        confirmingDelete = true
+                                    }
                                 )
                             }
-                            PillButton(
-                                label = stringResource(R.string.ui_media_voice_note),
-                                background = SignalSoft,
-                                foreground = SignalText,
-                                enabled = !actionBusy,
-                                onClick = {
-                                    onDismiss()
-                                    onStartVoiceNote(media)
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
                         }
                     }
                 }
@@ -792,7 +849,7 @@ internal fun MediaViewerDialog(
             onDismissRequest = { if (!savingCaption) editingCaption = false },
             modifier = Modifier.imePadding()
         ) {
-            Text(stringResource(R.string.ui_media_caption_label), style = MaterialTheme.typography.titleMedium, color = Ink)
+            Text(stringResource(R.string.ui_media_caption_label), style = MaterialTheme.typography.headlineSmall, color = Ink)
             Spacer(Modifier.height(14.dp))
             EditorField(
                 label = "",
@@ -888,14 +945,15 @@ internal fun MediaViewerDialog(
 
     if (viewingOcr) {
         AppDialogSurface(onDismissRequest = { viewingOcr = false }) {
-            Text(stringResource(R.string.ui_media_ocr_label), style = MaterialTheme.typography.titleMedium, color = Ink)
+            Text(stringResource(R.string.ui_media_ocr_label), style = MaterialTheme.typography.headlineSmall, color = Ink)
             Spacer(Modifier.height(12.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 320.dp)
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(Surface2)
+                    .border(1.dp, Line, RoundedCornerShape(8.dp))
                     .padding(14.dp)
                     .verticalScroll(rememberScrollState())
             ) {
@@ -928,7 +986,7 @@ internal fun MediaViewerDialog(
         var chosen by remember(media.id) { mutableStateOf(Formats.next) }
         val llmReady = TransformModel.isInstalled(context.filesDir)
         AppDialogSurface(onDismissRequest = { pickingShapeFormat = false }) {
-            Text(stringResource(R.string.ui_media_shape_dialog_title), style = MaterialTheme.typography.titleMedium, color = Ink)
+            Text(stringResource(R.string.ui_media_shape_dialog_title), style = MaterialTheme.typography.headlineSmall, color = Ink)
             Spacer(Modifier.height(8.dp))
             Text(
                 stringResource(
@@ -991,6 +1049,59 @@ internal fun MediaViewerDialog(
 }
 
 @Composable
+private fun PlateBarButton(
+    label: String,
+    active: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    accentSignal: Boolean = false
+) {
+    val bg = when {
+        !enabled -> Surface2
+        active && accentSignal -> SignalSoft
+        active -> BlueSoft
+        else -> Surface2
+    }
+    val fg = when {
+        !enabled -> Ink2
+        active && accentSignal -> SignalText
+        active -> BlueText
+        else -> Ink
+    }
+    val borderColor = when {
+        !enabled -> Line
+        active && accentSignal -> Signal.copy(alpha = 0.45f)
+        active -> Blue.copy(alpha = 0.45f)
+        else -> Line
+    }
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        color = bg,
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, borderColor),
+        modifier = modifier
+            .height(44.dp)
+            .alpha(if (enabled) 1f else 0.45f)
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.padding(horizontal = 6.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = fg,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
 internal fun LinkNotesDialog(
     media: MediaItem,
     spaceNotes: List<NoteItem>,
@@ -1002,7 +1113,7 @@ internal fun LinkNotesDialog(
     val scope = rememberCoroutineScope()
 
     AppDialogSurface(onDismissRequest = { if (!saving) onDismiss() }) {
-        Text(stringResource(R.string.ui_media_link_notes_title), style = MaterialTheme.typography.titleMedium, color = Ink)
+        Text(stringResource(R.string.ui_media_link_notes_title), style = MaterialTheme.typography.headlineSmall, color = Ink)
         Spacer(Modifier.height(12.dp))
         if (spaceNotes.isEmpty()) {
             Text(
@@ -1024,7 +1135,7 @@ internal fun LinkNotesDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 48.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .clickable(enabled = !saving) {
                                 selected = if (checked) selected - note.id else selected + note.id
                             }

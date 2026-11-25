@@ -6,12 +6,12 @@
 <resources>
 
     <!-- First-run flow (Onboarding.kt) -->
-    <string name="sys_onboarding_step1_title">Empieza a hablar</string>
-    <string name="sys_onboarding_step1_body">Toca grabar, di lo que tengas en mente y vuelve a tocar para parar. Se convierte en una nota sola.</string>
-    <string name="sys_onboarding_step2_title">Nada sale de este teléfono</string>
-    <string name="sys_onboarding_step2_body">La transcripción y la escritura se hacen en el dispositivo. Sin cuenta ni nube: nada de lo que grabas se sube.</string>
-    <string name="sys_onboarding_step3_title">Organiza con Espacios y Lentes</string>
-    <string name="sys_onboarding_step3_body">Agrupa notas e imágenes en Espacios, aplica Lentes de IA sobre ellas y concede micrófono y notificaciones solo cuando los uses.</string>
+    <string name="sys_onboarding_step1_title">Habla libre, pliega en tinta</string>
+    <string name="sys_onboarding_step1_body">Toca grabar, piensa en voz alta mientras caminas y vuelve a tocar al terminar. Inkvox destila tu voz en notas, listas o pasos claros.</string>
+    <string name="sys_onboarding_step2_title">Privado de raíz, todo en tu móvil</string>
+    <string name="sys_onboarding_step2_body">Tanto la transcripción como la escritura corren en tu teléfono. Sin cuenta, sin nube, sin subir nada.</string>
+    <string name="sys_onboarding_step3_title">Teje Espacios, Lentes y pasos claros</string>
+    <string name="sys_onboarding_step3_body">Reúne ideas y capturas en Espacios, descubre patrones con Lentes de IA y concede micrófono y notificaciones solo cuando los necesites.</string>
     <string name="sys_onboarding_permissions_hint">El micrófono se pide al grabar; las notificaciones mantienen visibles los informes y capturas en segundo plano.</string>
     <string name="sys_onboarding_action_continue">Continuar</string>
     <string name="sys_onboarding_action_get_started">Empezar</string>
@@ -53,17 +53,34 @@
     <!-- Transform model download status (TransformModel.kt) -->
     <string name="sys_llm_status_not_installed">Modelo de lenguaje no instalado</string>
     <string name="sys_llm_status_ready">Modelo de lenguaje listo (%1$d MB)</string>
+    <string name="sys_llm_status_downloading">Descargando modelo de lenguaje (%1$d%%)</string>
 
     <!-- Shared by both model downloaders -->
     <string name="sys_model_starting_download">Iniciando descarga</string>
+    <string name="sys_model_retrying">Conexión interrumpida, reanudando…</string>
     <string name="sys_model_verifying">Verificando</string>
     <string name="sys_model_download_failed">Error en la descarga: %1$s</string>
+
+    <!-- Foreground model download service (ModelDownloadService.kt) -->
+    <string name="sys_download_channel_name">Descargas de modelos</string>
+    <string name="sys_download_channel_description">Mantiene activas las descargas de modelos locales cuando se bloquea la pantalla</string>
+    <string name="sys_download_notif_llm_title">Descargando modelo de lenguaje</string>
+    <string name="sys_download_notif_asr_title">Descargando modelo de transcripción</string>
+    <string name="sys_download_notif_both_title">Descargando modelos locales</string>
+    <string name="sys_download_notif_progress">%1$d%% · Puedes bloquear el teléfono</string>
+    <string name="sys_download_notif_verifying">Verificando descarga…</string>
+    <string name="sys_download_notif_cancel">Cancelar</string>
+    <string name="sys_download_done_llm_title">Modelo de lenguaje listo</string>
+    <string name="sys_download_done_asr_title">Modelo de transcripción listo</string>
+    <string name="sys_download_done_text">Descarga completa. Inkvox está listo sin conexión.</string>
+    <string name="sys_download_failed_title">Descarga de modelo en pausa</string>
+    <string name="sys_download_failed_text">Toca para abrir Inkvox y reanudar donde quedó.</string>
 
     <!-- Acceso rápido y widget de pantalla de inicio -->
     <string name="sys_tile_label">Capturar</string>
     <string name="sys_tile_idle">Toca para grabar</string>
     <string name="sys_tile_recording">Grabando · Toca para parar</string>
-    <string name="sys_widget_label">Captura rápida Sievex</string>
+    <string name="sys_widget_label">Captura rápida Inkvox</string>
     <string name="sys_widget_description">Inicia o detiene una nota de voz local con un toque</string>
     <string name="sys_widget_idle">Toca para capturar</string>
     <string name="sys_widget_recording">Grabando · Toca para parar</string>

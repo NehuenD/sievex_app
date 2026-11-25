@@ -13,7 +13,7 @@
     <string name="ui_tab_notes">Notas</string>
     <string name="ui_tab_actions">Acciones</string>
     <string name="ui_tab_settings">Ajustes</string>
-    <string name="ui_brand_name">SievexAI</string>
+    <string name="ui_brand_name">Inkvox</string>
     <string name="ui_action_back">Atrás</string>
     <string name="ui_action_edit">Editar</string>
     <string name="ui_action_cancel">Cancelar</string>
@@ -245,7 +245,7 @@
     <string name="ui_media_delete_body">Esto elimina la imagen del espacio. Las notas vinculadas se conservan.</string>
     <string name="ui_media_delete_confirm">Eliminar imagen</string>
     <string name="ui_note_images">Imágenes</string>
-    <string name="ui_share_title">Guardar imagen en Sievex</string>
+    <string name="ui_share_title">Guardar imagen en Inkvox</string>
     <string name="ui_share_count_many">%1$d imágenes</string>
     <string name="ui_share_space_label">Espacio</string>
     <string name="ui_share_no_spaces">Crea un espacio para guardar esta imagen</string>
@@ -365,7 +365,7 @@
     <!-- Compartir recortes de texto y OCR automático -->
     <string name="ui_share_also_shape_ocr">También convertir el OCR en una nota</string>
     <string name="ui_share_shaping_background">Guardado · creando nota OCR en segundo plano</string>
-    <string name="ui_share_text_title">Guardar recorte en Sievex</string>
+    <string name="ui_share_text_title">Guardar recorte en Inkvox</string>
     <string name="ui_share_text_subtitle">Cita, enlace o fragmento</string>
     <string name="ui_share_text_clip_label">Texto compartido</string>
     <string name="ui_share_text_clip_hint">Texto o enlace</string>
@@ -415,4 +415,36 @@
     <string name="ui_questions_subtitle_draft_one">1 borrador por revisar</string>
     <string name="ui_questions_subtitle_drafts_only">%1$d borradores por revisar</string>
     <string name="ui_questions_subtitle_mixed">%1$d abiertas · %2$d borradores por revisar</string>
+
+    <!-- Rediseño Folio Desk -->
+    <string name="ui_tab_desk">Escritorio</string>
+    <string name="ui_tab_triage">Archivo</string>
+    <string name="ui_desk_shelf_title">ESTANTE DE ESPACIOS</string>
+    <string name="ui_desk_search_action">Buscar</string>
+    <string name="ui_desk_filter_audio">Audio</string>
+    <string name="ui_desk_filter_images">Imágenes</string>
+    <string name="ui_spaces_folio_genre">FOLIO</string>
+    <string name="ui_space_margin_notes_tab">Notas al margen</string>
+    <string name="ui_space_exhibits_tab">Exhibiciones</string>
+    <string name="ui_capture_strip_prompt">Grabar voz o apuntar nota…</string>
+    <string name="ui_capture_strip_recording">%1$s · Grabando</string>
+    <string name="ui_capture_rec_pill">REC</string>
+    <string name="ui_capture_sheet_kicker">MESA DE CAPTURA</string>
+    <string name="ui_capture_sheet_title">Voz y nota al margen</string>
+    <string name="ui_capture_jot_title">Anotar al margen</string>
+    <string name="ui_capture_jot_hint">Escribe una idea rápida para archivar…</string>
+    <string name="ui_capture_full_editor">Editor completo</string>
+    <string name="ui_triage_stamp_draft">BORRADOR</string>
+    <string name="ui_triage_stamp_open">ABIERTA</string>
+    <string name="ui_triage_stamp_action">ACCIÓN</string>
+    <string name="ui_triage_stamp_reminder">AVISO</string>
+    <string name="ui_media_plate_kicker">LÁMINA</string>
+    <string name="ui_media_summary_toggle">Resumen</string>
+    <string name="ui_media_ocr_short">OCR</string>
+    <string name="ui_media_to_note_short">A nota</string>
+    <string name="ui_media_link_short">Vincular</string>
+    <string name="ui_settings_appearance">APARIENCIA</string>
+    <string name="ui_settings_theme_system">Sistema</string>
+    <string name="ui_settings_theme_light">Claro</string>
+    <string name="ui_settings_theme_dark">Oscuro</string>
 </resources>

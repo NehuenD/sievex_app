@@ -13,7 +13,7 @@
     <string name="ui_tab_notes">Notes</string>
     <string name="ui_tab_actions">Actions</string>
     <string name="ui_tab_settings">Settings</string>
-    <string name="ui_brand_name">SievexAI</string>
+    <string name="ui_brand_name">Inkvox</string>
     <string name="ui_action_back">Back</string>
     <string name="ui_action_edit">Edit</string>
     <string name="ui_action_cancel">Cancel</string>
@@ -245,7 +245,7 @@
     <string name="ui_media_delete_body">This removes the image from the space. Linked notes are kept.</string>
     <string name="ui_media_delete_confirm">Delete image</string>
     <string name="ui_note_images">Images</string>
-    <string name="ui_share_title">Save image to Sievex</string>
+    <string name="ui_share_title">Save image to Inkvox</string>
     <string name="ui_share_count_many">%1$d images</string>
     <string name="ui_share_space_label">Space</string>
     <string name="ui_share_no_spaces">Create a space to file this image</string>
@@ -365,7 +365,7 @@
     <!-- Share text clips & auto-shape OCR -->
     <string name="ui_share_also_shape_ocr">Also shape OCR text into a Note</string>
     <string name="ui_share_shaping_background">Saved · shaping OCR note in background</string>
-    <string name="ui_share_text_title">Save clip to Sievex</string>
+    <string name="ui_share_text_title">Save clip to Inkvox</string>
     <string name="ui_share_text_subtitle">Highlight, URL, or quote</string>
     <string name="ui_share_text_clip_label">Clipped text</string>
     <string name="ui_share_text_clip_hint">Shared text or link</string>
@@ -415,4 +415,36 @@
     <string name="ui_questions_subtitle_draft_one">1 draft to review</string>
     <string name="ui_questions_subtitle_drafts_only">%1$d drafts to review</string>
     <string name="ui_questions_subtitle_mixed">%1$d open · %2$d drafts to review</string>
+
+    <!-- Folio Desk redesign -->
+    <string name="ui_tab_desk">Desk</string>
+    <string name="ui_tab_triage">Triage</string>
+    <string name="ui_desk_shelf_title">SPACES SHELF</string>
+    <string name="ui_desk_search_action">Search</string>
+    <string name="ui_desk_filter_audio">Audio</string>
+    <string name="ui_desk_filter_images">Images</string>
+    <string name="ui_spaces_folio_genre">FOLIO</string>
+    <string name="ui_space_margin_notes_tab">Margin Notes</string>
+    <string name="ui_space_exhibits_tab">Exhibits</string>
+    <string name="ui_capture_strip_prompt">Capture voice or jot note…</string>
+    <string name="ui_capture_strip_recording">%1$s · Recording</string>
+    <string name="ui_capture_rec_pill">REC</string>
+    <string name="ui_capture_sheet_kicker">CAPTURE DESK</string>
+    <string name="ui_capture_sheet_title">Voice &amp; Margin Note</string>
+    <string name="ui_capture_jot_title">Jot a margin note</string>
+    <string name="ui_capture_jot_hint">Write a quick thought to file…</string>
+    <string name="ui_capture_full_editor">Full editor</string>
+    <string name="ui_triage_stamp_draft">DRAFT</string>
+    <string name="ui_triage_stamp_open">OPEN</string>
+    <string name="ui_triage_stamp_action">ACTION</string>
+    <string name="ui_triage_stamp_reminder">REMINDER</string>
+    <string name="ui_media_plate_kicker">GALLERY PLATE</string>
+    <string name="ui_media_summary_toggle">Summary</string>
+    <string name="ui_media_ocr_short">OCR</string>
+    <string name="ui_media_to_note_short">To Note</string>
+    <string name="ui_media_link_short">Link</string>
+    <string name="ui_settings_appearance">APPEARANCE</string>
+    <string name="ui_settings_theme_system">System</string>
+    <string name="ui_settings_theme_light">Light</string>
+    <string name="ui_settings_theme_dark">Dark</string>
 </resources>

@@ -37,6 +37,7 @@
     <string name="step_items">Extrayendo los elementos</string>
     <string name="step_steps">Ordenando los pasos</string>
     <string name="step_insights">Creando el hallazgo</string>
+    <string name="step_questions">Borradores de preguntas</string>
     <string name="step_tags">Añadiendo etiquetas</string>
     <string name="step_saving">Guardando la nota</string>
 
